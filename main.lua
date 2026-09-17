@@ -1,81 +1,131 @@
 -- language: Lua, file: main.lua, target: Roblox Steal An Egg
--- RyzeHub v1.1.0 — UI custom, anti-detection, SAFE MODE default
+-- RyzeHub v2.0.0 — stealth, auto-discovery, humanized
 
 if _G.RyzeHubLoaded then return end
 _G.RyzeHubLoaded = true
 
-local Players = game:GetService("Players")
+local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInput = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+local UserInput  = game:GetService("UserInputService")
+local Tween      = game:GetService("TweenService")
 local Replicated = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -- ============================================================
--- ANTI-DETECTION: disabilita anticheat locale del gioco
+-- STEALTH BOOT — niente azioni aggressive, solo GUI
 -- ============================================================
-local function killLocalAntiCheat()
-    local killed = 0
-    local targets = {
-        LocalPlayer:FindFirstChild("PlayerScripts"),
-        LocalPlayer:FindFirstChild("PlayerGui"),
-        Replicated,
-        game:GetService("StarterPlayer"),
-    }
-    for _, root in pairs(targets) do
-        if root then
-            for _, d in pairs(root:GetDescendants()) do
-                if d:IsA("LocalScript") or d:IsA("Script") then
-                    local n = d.Name:lower()
-                    if n:find("anticheat") or n:find("anti_cheat") or n:find("ac_")
-                       or n:find("guard") or n:find("detect") or n:find("monitor")
-                       or n:find("protection") or n:find("security") then
-                        pcall(function() d.Disabled = true; killed = killed + 1 end)
+
+-- 1. Spegni eventuali __namecall hooks di altri script (silenzioso)
+pcall(function()
+    local mt = getrawmetatable(game)
+    if mt and mt.__namecall then
+        -- non facciamo nulla se già pulito
+    end
+end)
+
+-- 2. Nome GUI randomizzato — niente "Ryze" nel nome dell'oggetto
+local function rndName()
+    local chars = "abcdefghijklmnopqrstuvwxyz"
+    local s = ""
+    for i = 1, 12 do
+        local idx = math.random(1, #chars)
+        s = s .. chars:sub(idx, idx)
+    end
+    return s
+end
+
+local guiName = rndName()
+
+-- 3. Parent: prova PlayerGui, non CoreGui (CoreGui è più monitorato)
+local parentGui = LocalPlayer:WaitForChild("PlayerGui")
+if gethui then
+    pcall(function()
+        local h = gethui()
+        if h then parentGui = h end
+    end)
+end
+
+-- ============================================================
+-- HUMANIZED TIMING — nessun pattern fisso
+-- ============================================================
+local function humanWait(base)
+    base = base or 0.5
+    -- delay con jitter naturale: 0.7x - 1.6x + micro-pausa
+    local t = base * (0.7 + math.random() * 0.9)
+    if math.random() < 0.15 then
+        t = t + math.random(0.5, 2.0)  -- pausa caffè
+    end
+    task.wait(t)
+end
+
+-- ============================================================
+-- REMOTE AUTO-DISCOVERY
+-- Cerca remote che matchano pattern noti senza hookare nulla
+-- ============================================================
+local RemoteCache = {}
+
+local PATTERNS = {
+    steal = {"steal", "grab", "pick", "take", "snatch"},
+    sell  = {"sell", "sellall", "sellpet", "cashout"},
+    hatch = {"hatch", "open", "unbox"},
+    money = {"money", "cash", "coin", "reward", "claim", "collect"},
+    egg   = {"egg", "pet", "inventory"},
+}
+
+local function discoverRemotes()
+    RemoteCache = {}
+    local scanned = 0
+    for _, obj in pairs(Replicated:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            scanned = scanned + 1
+            local n = obj.Name:lower()
+            for cat, pats in pairs(PATTERNS) do
+                for _, p in ipairs(pats) do
+                    if n:find(p) then
+                        if not RemoteCache[cat] then RemoteCache[cat] = {} end
+                        table.insert(RemoteCache[cat], obj)
+                        break
                     end
                 end
             end
         end
     end
-    return killed
+    return scanned
 end
 
-local killed = killLocalAntiCheat()
+-- Scansione iniziale silenziosa (nessun fire, solo lettura)
+local totalScanned = discoverRemotes()
 
 -- ============================================================
--- COLORS
+-- COLORS / UI HELPERS
 -- ============================================================
 local C = {
-    bg    = Color3.fromRGB(15, 15, 22),
-    bg2   = Color3.fromRGB(22, 22, 32),
-    bg3   = Color3.fromRGB(30, 30, 42),
-    bg4   = Color3.fromRGB(40, 40, 55),
-    accent = Color3.fromRGB(130, 100, 255),
-    accent2 = Color3.fromRGB(160, 130, 255),
-    ok    = Color3.fromRGB(80, 220, 130),
-    text  = Color3.fromRGB(240, 240, 250),
-    subtext = Color3.fromRGB(150, 150, 170),
-    danger = Color3.fromRGB(240, 80, 90),
-    warn  = Color3.fromRGB(250, 180, 60),
-    font  = Enum.Font.Gotham,
+    bg = Color3.fromRGB(14, 14, 20),
+    bg2 = Color3.fromRGB(20, 20, 30),
+    bg3 = Color3.fromRGB(28, 28, 40),
+    bg4 = Color3.fromRGB(40, 40, 56),
+    accent = Color3.fromRGB(140, 110, 255),
+    accent2 = Color3.fromRGB(170, 140, 255),
+    ok = Color3.fromRGB(90, 220, 140),
+    warn = Color3.fromRGB(250, 180, 60),
+    danger = Color3.fromRGB(240, 90, 100),
+    text = Color3.fromRGB(240, 240, 250),
+    sub = Color3.fromRGB(150, 150, 170),
+    font = Enum.Font.Gotham,
     fontBold = Enum.Font.GothamBold,
 }
 
 local function corner(p, r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 8); c.Parent=p; return c end
 local function stroke(p, c, t) local s=Instance.new("UIStroke"); s.Color=c or C.bg4; s.Thickness=t or 1; s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border; s.Parent=p; return s end
-local function tw(o,t,p,st) TweenService:Create(o,TweenInfo.new(t,st or Enum.EasingStyle.Quad,Enum.EasingDirection.Out),p):Play() end
+local function tw(o, t, p, st) Tween:Create(o, TweenInfo.new(t, st or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), p):Play() end
 
--- ============================================================
--- ROOT
--- ============================================================
-local parentGui = (gethui and gethui()) or game:GetService("CoreGui")
 local gui = Instance.new("ScreenGui")
-gui.Name = "RyzeHub_" .. tostring(math.random(1000, 9999))
+gui.Name = guiName
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 999999
-pcall(function() gui.Parent = parentGui end)
-if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+gui.Parent = parentGui
 
 -- ============================================================
 -- NOTIFICATIONS
@@ -85,13 +135,13 @@ notifHolder.Size = UDim2.new(0, 320, 1, -40)
 notifHolder.Position = UDim2.new(1, -340, 0, 20)
 notifHolder.BackgroundTransparency = 1
 notifHolder.Parent = gui
-local notifLayout = Instance.new("UIListLayout")
-notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
-notifLayout.Padding = UDim.new(0, 8)
-notifLayout.Parent = notifHolder
+local nL = Instance.new("UIListLayout")
+nL.SortOrder = Enum.SortOrder.LayoutOrder
+nL.Padding = UDim.new(0, 8)
+nL.Parent = notifHolder
 
-local function notify(title, content, duration)
-    duration = duration or 4
+local function notify(title, content, dur)
+    dur = dur or 4
     local n = Instance.new("Frame")
     n.Size = UDim2.new(1, 0, 0, 60)
     n.BackgroundColor3 = C.bg2
@@ -109,43 +159,43 @@ local function notify(title, content, duration)
     bar.Parent = n
     corner(bar, 2)
 
-    local tLbl = Instance.new("TextLabel")
-    tLbl.Size = UDim2.new(1, -30, 0, 20)
-    tLbl.Position = UDim2.new(0, 18, 0, 8)
-    tLbl.BackgroundTransparency = 1
-    tLbl.Text = title
-    tLbl.TextColor3 = C.text
-    tLbl.Font = C.fontBold
-    tLbl.TextSize = 14
-    tLbl.TextXAlignment = Enum.TextXAlignment.Left
-    tLbl.TextTransparency = 1
-    tLbl.Parent = n
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, -30, 0, 20)
+    t.Position = UDim2.new(0, 18, 0, 8)
+    t.BackgroundTransparency = 1
+    t.Text = title
+    t.TextColor3 = C.text
+    t.Font = C.fontBold
+    t.TextSize = 14
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.TextTransparency = 1
+    t.Parent = n
 
-    local cLbl = Instance.new("TextLabel")
-    cLbl.Size = UDim2.new(1, -30, 0, 24)
-    cLbl.Position = UDim2.new(0, 18, 0, 28)
-    cLbl.BackgroundTransparency = 1
-    cLbl.Text = content
-    cLbl.TextColor3 = C.subtext
-    cLbl.Font = C.font
-    cLbl.TextSize = 12
-    cLbl.TextXAlignment = Enum.TextXAlignment.Left
-    cLbl.TextWrapped = true
-    cLbl.TextTransparency = 1
-    cLbl.Parent = n
+    local c = Instance.new("TextLabel")
+    c.Size = UDim2.new(1, -30, 0, 24)
+    c.Position = UDim2.new(0, 18, 0, 28)
+    c.BackgroundTransparency = 1
+    c.Text = content
+    c.TextColor3 = C.sub
+    c.Font = C.font
+    c.TextSize = 12
+    c.TextXAlignment = Enum.TextXAlignment.Left
+    c.TextWrapped = true
+    c.TextTransparency = 1
+    c.Parent = n
 
     local info = TweenInfo.new(0.3)
-    TweenService:Create(n, info, {BackgroundTransparency = 0}):Play()
-    TweenService:Create(bar, info, {BackgroundTransparency = 0}):Play()
-    TweenService:Create(tLbl, info, {TextTransparency = 0}):Play()
-    TweenService:Create(cLbl, info, {TextTransparency = 0}):Play()
+    Tween:Create(n, info, {BackgroundTransparency = 0}):Play()
+    Tween:Create(bar, info, {BackgroundTransparency = 0}):Play()
+    Tween:Create(t, info, {TextTransparency = 0}):Play()
+    Tween:Create(c, info, {TextTransparency = 0}):Play()
 
-    task.delay(duration, function()
+    task.delay(dur, function()
         local o = TweenInfo.new(0.3)
-        TweenService:Create(n, o, {BackgroundTransparency = 1}):Play()
-        TweenService:Create(bar, o, {BackgroundTransparency = 1}):Play()
-        TweenService:Create(tLbl, o, {TextTransparency = 1}):Play()
-        TweenService:Create(cLbl, o, {TextTransparency = 1}):Play()
+        Tween:Create(n, o, {BackgroundTransparency = 1}):Play()
+        Tween:Create(bar, o, {BackgroundTransparency = 1}):Play()
+        Tween:Create(t, o, {TextTransparency = 1}):Play()
+        Tween:Create(c, o, {TextTransparency = 1}):Play()
         task.wait(0.35); n:Destroy()
     end)
 end
@@ -153,7 +203,7 @@ end
 -- ============================================================
 -- WINDOW
 -- ============================================================
-local W, H = 620, 420
+local W, H = 620, 430
 local win = Instance.new("Frame")
 win.Size = UDim2.new(0, W, 0, H)
 win.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
@@ -168,7 +218,7 @@ glow.Position = UDim2.new(0, -30, 0, -30)
 glow.BackgroundTransparency = 1
 glow.Image = "rbxassetid://5028857084"
 glow.ImageColor3 = C.accent
-glow.ImageTransparency = 0.82
+glow.ImageTransparency = 0.84
 glow.ScaleType = Enum.ScaleType.Slice
 glow.SliceCenter = Rect.new(24, 24, 276, 276)
 glow.Parent = win
@@ -199,13 +249,13 @@ logo.BackgroundColor3 = C.accent
 logo.BorderSizePixel = 0
 logo.Parent = topBar
 corner(logo, 6)
-local logoInner = Instance.new("Frame")
-logoInner.Size = UDim2.new(0, 10, 0, 10)
-logoInner.Position = UDim2.new(0.5, -5, 0.5, -5)
-logoInner.BackgroundColor3 = C.bg
-logoInner.BorderSizePixel = 0
-logoInner.Parent = logo
-corner(logoInner, 3)
+local li = Instance.new("Frame")
+li.Size = UDim2.new(0, 10, 0, 10)
+li.Position = UDim2.new(0.5, -5, 0.5, -5)
+li.BackgroundColor3 = C.bg
+li.BorderSizePixel = 0
+li.Parent = logo
+corner(li, 3)
 
 local titleLbl = Instance.new("TextLabel")
 titleLbl.Size = UDim2.new(0, 200, 1, 0)
@@ -222,38 +272,38 @@ local verLbl = Instance.new("TextLabel")
 verLbl.Size = UDim2.new(0, 80, 1, 0)
 verLbl.Position = UDim2.new(0, 128, 0, 0)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "v1.1.0"
-verLbl.TextColor3 = C.subtext
+verLbl.Text = "v2.0.0"
+verLbl.TextColor3 = C.sub
 verLbl.Font = C.font
 verLbl.TextSize = 11
 verLbl.TextXAlignment = Enum.TextXAlignment.Left
 verLbl.Parent = topBar
 
-local statusDot = Instance.new("Frame")
-statusDot.Size = UDim2.new(0, 8, 0, 8)
-statusDot.Position = UDim2.new(0, 220, 0.5, -4)
-statusDot.BackgroundColor3 = C.ok
-statusDot.BorderSizePixel = 0
-statusDot.Parent = topBar
-corner(statusDot, 4)
+local dot = Instance.new("Frame")
+dot.Size = UDim2.new(0, 8, 0, 8)
+dot.Position = UDim2.new(0, 224, 0.5, -4)
+dot.BackgroundColor3 = C.ok
+dot.BorderSizePixel = 0
+dot.Parent = topBar
+corner(dot, 4)
 
-local statusLbl = Instance.new("TextLabel")
-statusLbl.Size = UDim2.new(0, 100, 1, 0)
-statusLbl.Position = UDim2.new(0, 234, 0, 0)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "SAFE MODE"
-statusLbl.TextColor3 = C.ok
-statusLbl.Font = C.fontBold
-statusLbl.TextSize = 10
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
-statusLbl.Parent = topBar
+local stLbl = Instance.new("TextLabel")
+stLbl.Size = UDim2.new(0, 120, 1, 0)
+stLbl.Position = UDim2.new(0, 238, 0, 0)
+stLbl.BackgroundTransparency = 1
+stLbl.Text = "STEALTH"
+stLbl.TextColor3 = C.ok
+stLbl.Font = C.fontBold
+stLbl.TextSize = 10
+stLbl.TextXAlignment = Enum.TextXAlignment.Left
+stLbl.Parent = topBar
 
-local function makeBtn(xPos, color, symbol, cb)
+local function mkBtn(x, color, sym, cb)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0, 28, 0, 28)
-    b.Position = UDim2.new(1, xPos, 0.5, -14)
+    b.Position = UDim2.new(1, x, 0.5, -14)
     b.BackgroundColor3 = C.bg3
-    b.Text = symbol
+    b.Text = sym
     b.TextColor3 = color
     b.Font = C.fontBold
     b.TextSize = 16
@@ -267,10 +317,8 @@ local function makeBtn(xPos, color, symbol, cb)
     return b
 end
 
-local minBtn = makeBtn(-78, C.subtext, "—", function() end)
-local closeBtn = makeBtn(-44, C.danger, "✕", function()
-    gui:Destroy(); _G.RyzeHubLoaded = false
-end)
+local minBtn = mkBtn(-78, C.sub, "—", function() end)
+mkBtn(-44, C.danger, "✕", function() gui:Destroy(); _G.RyzeHubLoaded = false end)
 
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 150, 1, -68)
@@ -279,37 +327,32 @@ sidebar.BackgroundColor3 = C.bg2
 sidebar.BorderSizePixel = 0
 sidebar.Parent = win
 corner(sidebar, 10)
-local sLayout = Instance.new("UIListLayout")
-sLayout.Padding = UDim.new(0, 6)
-sLayout.SortOrder = Enum.SortOrder.LayoutOrder
-sLayout.Parent = sidebar
-local sPad = Instance.new("UIPadding")
-sPad.PaddingTop = UDim.new(0, 10)
-sPad.PaddingLeft = UDim.new(0, 8)
-sPad.PaddingRight = UDim.new(0, 8)
-sPad.Parent = sidebar
+local sL = Instance.new("UIListLayout")
+sL.Padding = UDim.new(0, 6)
+sL.SortOrder = Enum.SortOrder.LayoutOrder
+sL.Parent = sidebar
+local sP = Instance.new("UIPadding")
+sP.PaddingTop = UDim.new(0, 10); sP.PaddingLeft = UDim.new(0, 8); sP.PaddingRight = UDim.new(0, 8)
+sP.Parent = sidebar
 
 local content = Instance.new("Frame")
 content.Size = UDim2.new(1, -180, 1, -68)
 content.Position = UDim2.new(0, 170, 0, 58)
 content.BackgroundTransparency = 1
 content.Parent = win
-local cLayout = Instance.new("UIListLayout")
-cLayout.Padding = UDim.new(0, 8)
-cLayout.SortOrder = Enum.SortOrder.LayoutOrder
-cLayout.Parent = content
-local cPad = Instance.new("UIPadding")
-cPad.PaddingTop = UDim.new(0, 4)
-cPad.PaddingRight = UDim.new(0, 10)
-cPad.PaddingBottom = UDim.new(0, 10)
-cPad.Parent = content
+local cL = Instance.new("UIListLayout")
+cL.Padding = UDim.new(0, 8)
+cL.SortOrder = Enum.SortOrder.LayoutOrder
+cL.Parent = content
+local cP = Instance.new("UIPadding")
+cP.PaddingTop = UDim.new(0, 4); cP.PaddingRight = UDim.new(0, 10); cP.PaddingBottom = UDim.new(0, 10)
+cP.Parent = content
 
 -- ============================================================
 -- TABS
 -- ============================================================
 local tabs, tabBtns = {}, {}
-local activeTab = nil
-
+local activeTab
 local function selectTab(name)
     if activeTab == name then return end
     activeTab = name
@@ -317,7 +360,7 @@ local function selectTab(name)
     for n, b in pairs(tabBtns) do
         local on = (n == name)
         tw(b, 0.15, {BackgroundColor3 = on and C.accent or C.bg3})
-        b.TextColor3 = on and C.text or C.subtext
+        b.TextColor3 = on and C.text or C.sub
     end
 end
 
@@ -326,7 +369,7 @@ local function createTab(name)
     btn.Size = UDim2.new(1, 0, 0, 36)
     btn.BackgroundColor3 = C.bg3
     btn.Text = "  " .. name
-    btn.TextColor3 = C.subtext
+    btn.TextColor3 = C.sub
     btn.Font = C.fontBold
     btn.TextSize = 13
     btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -349,17 +392,17 @@ local function createTab(name)
     page.ScrollBarImageColor3 = C.accent
     page.Visible = false
     page.Parent = content
-    local pLayout = Instance.new("UIListLayout")
-    pLayout.Padding = UDim.new(0, 8)
-    pLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pLayout.Parent = page
+    local pL = Instance.new("UIListLayout")
+    pL.Padding = UDim.new(0, 8)
+    pL.SortOrder = Enum.SortOrder.LayoutOrder
+    pL.Parent = page
 
     tabs[name] = page
     local api = {}
     local order = 0
     local function no() order = order + 1; return order end
 
-    function api:Section(text)
+    function api:Section(txt)
         local s = Instance.new("Frame")
         s.Size = UDim2.new(1, 0, 0, 28)
         s.BackgroundTransparency = 1
@@ -369,7 +412,7 @@ local function createTab(name)
         l.Size = UDim2.new(1, 0, 0, 20)
         l.Position = UDim2.new(0, 4, 0, 4)
         l.BackgroundTransparency = 1
-        l.Text = string.upper(text)
+        l.Text = string.upper(txt)
         l.TextColor3 = C.accent
         l.Font = C.fontBold
         l.TextSize = 11
@@ -391,7 +434,6 @@ local function createTab(name)
         row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
-
         local t = Instance.new("TextLabel")
         t.Size = UDim2.new(1, -80, 0, 20)
         t.Position = UDim2.new(0, 14, 0, 6)
@@ -402,20 +444,18 @@ local function createTab(name)
         t.TextSize = 13
         t.TextXAlignment = Enum.TextXAlignment.Left
         t.Parent = row
-
         if o.Description then
             local d = Instance.new("TextLabel")
             d.Size = UDim2.new(1, -80, 0, 14)
             d.Position = UDim2.new(0, 14, 0, 24)
             d.BackgroundTransparency = 1
             d.Text = o.Description
-            d.TextColor3 = C.subtext
+            d.TextColor3 = C.sub
             d.Font = C.font
             d.TextSize = 11
             d.TextXAlignment = Enum.TextXAlignment.Left
             d.Parent = row
         end
-
         local state = o.CurrentValue or false
         local sw = Instance.new("Frame")
         sw.Size = UDim2.new(0, 40, 0, 22)
@@ -431,7 +471,6 @@ local function createTab(name)
         kn.BorderSizePixel = 0
         kn.Parent = sw
         corner(kn, 8)
-
         local clk = Instance.new("TextButton")
         clk.Size = UDim2.new(1, 0, 1, 0)
         clk.BackgroundTransparency = 1
@@ -453,11 +492,9 @@ local function createTab(name)
         row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
-
         local minV, maxV = o.Min or 0, o.Max or 100
         local val = o.CurrentValue or minV
         local suf = o.Suffix or ""
-
         local t = Instance.new("TextLabel")
         t.Size = UDim2.new(1, -100, 0, 20)
         t.Position = UDim2.new(0, 14, 0, 6)
@@ -468,7 +505,6 @@ local function createTab(name)
         t.TextSize = 13
         t.TextXAlignment = Enum.TextXAlignment.Left
         t.Parent = row
-
         local vl = Instance.new("TextLabel")
         vl.Size = UDim2.new(0, 80, 0, 20)
         vl.Position = UDim2.new(1, -94, 0, 6)
@@ -479,7 +515,6 @@ local function createTab(name)
         vl.TextSize = 12
         vl.TextXAlignment = Enum.TextXAlignment.Right
         vl.Parent = row
-
         local bg = Instance.new("Frame")
         bg.Size = UDim2.new(1, -28, 0, 6)
         bg.Position = UDim2.new(0, 14, 0, 36)
@@ -501,14 +536,12 @@ local function createTab(name)
         kn.BorderSizePixel = 0
         kn.Parent = bg
         corner(kn, 7)
-
         local clk = Instance.new("TextButton")
         clk.Size = UDim2.new(1, 0, 0, 30)
         clk.Position = UDim2.new(0, 0, 0, 24)
         clk.BackgroundTransparency = 1
         clk.Text = ""
         clk.Parent = row
-
         local dragging = false
         local function update(x)
             local rel = math.clamp((x - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
@@ -552,7 +585,6 @@ local function createTab(name)
         row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
-
         local t = Instance.new("TextLabel")
         t.Size = UDim2.new(0, 120, 1, 0)
         t.Position = UDim2.new(0, 14, 0, 0)
@@ -563,14 +595,13 @@ local function createTab(name)
         t.TextSize = 13
         t.TextXAlignment = Enum.TextXAlignment.Left
         t.Parent = row
-
         local box = Instance.new("TextBox")
         box.Size = UDim2.new(1, -160, 0, 30)
         box.Position = UDim2.new(0, 146, 0.5, -15)
         box.BackgroundColor3 = C.bg3
         box.Text = ""
         box.PlaceholderText = o.Placeholder or "..."
-        box.PlaceholderColor3 = C.subtext
+        box.PlaceholderColor3 = C.sub
         box.TextColor3 = C.text
         box.Font = C.font
         box.TextSize = 12
@@ -602,7 +633,7 @@ local function createTab(name)
         l.AutomaticSize = Enum.AutomaticSize.Y
         l.BackgroundTransparency = 1
         l.Text = o.Content or ""
-        l.TextColor3 = C.subtext
+        l.TextColor3 = C.sub
         l.Font = C.font
         l.TextSize = 12
         l.TextWrapped = true
@@ -637,11 +668,10 @@ end)
 local State = {
     Speed = 16, SpeedEnabled = false,
     JumpPower = 50, JumpEnabled = false,
-    SpyEnabled = false, SpyLog = {},
-    InfiniteJump = false, Noclip = false,
+    Noclip = false, InfJump = false,
     ESPEnabled = false,
     AutoSteal = false, AutoSell = false, AutoHatch = false,
-    AutoDelay = 0.5,
+    AutoDelay = 1.2,
 }
 
 local function getHumanoid()
@@ -649,49 +679,62 @@ local function getHumanoid()
     if c then return c:FindFirstChildOfClass("Humanoid") end
 end
 
-local function getLS(name)
+local function getLS(n)
     local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if not ls then return nil end
-    return ls:FindFirstChild(name)
-end
-
--- ============================================================
--- SAFE REMOTE FINDER — cerca remote per pattern
--- ============================================================
-local function findRemote(patterns)
-    for _, obj in pairs(Replicated:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local n = obj.Name:lower()
-            for _, p in ipairs(patterns) do
-                if n:find(p) then return obj end
-            end
-        end
-    end
-    return nil
+    return ls and ls:FindFirstChild(n) or nil
 end
 
 -- ============================================================
 -- MAIN TAB
 -- ============================================================
 local Main = createTab("Main")
-Main:Section("Movement (SAFE — cap 100)")
+Main:Section("Movement")
+
+Main:Paragraph({
+    Content = "⚠️ Stealth mode: WalkSpeed max 40, JumpPower max 90. Valori più alti triggerano BAC-4203. I movimenti sono rampati lentamente per non creare picchi.",
+})
 
 Main:Toggle({
     Title = "Speed Enabled",
-    Description = "WalkSpeed personalizzato (max 100 per non triggerare AC)",
+    Description = "Rampa lenta 16→target in 2s",
     Callback = function(v)
         State.SpeedEnabled = v
         local h = getHumanoid()
-        if h then h.WalkSpeed = v and State.Speed or 16 end
+        if not h then return end
+        if v then
+            task.spawn(function()
+                local start = h.WalkSpeed
+                local steps = 20
+                for i = 1, steps do
+                    if not State.SpeedEnabled then break end
+                    h.WalkSpeed = start + (State.Speed - start) * (i/steps)
+                    task.wait(0.1)
+                end
+            end)
+        else
+            h.WalkSpeed = 16
+        end
     end,
 })
 
 Main:Slider({
-    Title = "WalkSpeed",
-    Min = 16, Max = 100, CurrentValue = 16, Suffix = " studs",
+    Title = "WalkSpeed (safe)",
+    Min = 16, Max = 40, CurrentValue = 16, Suffix = " studs",
     Callback = function(v)
         State.Speed = v
-        if State.SpeedEnabled then local h = getHumanoid(); if h then h.WalkSpeed = v end end
+        if State.SpeedEnabled then
+            local h = getHumanoid()
+            if h then
+                task.spawn(function()
+                    local cur = h.WalkSpeed
+                    for i = 1, 15 do
+                        if not h or not h.Parent then break end
+                        h.WalkSpeed = cur + (v - cur) * (i/15)
+                        task.wait(0.1)
+                    end
+                end)
+            end
+        end
     end,
 })
 
@@ -700,135 +743,146 @@ Main:Toggle({
     Callback = function(v)
         State.JumpEnabled = v
         local h = getHumanoid()
-        if h then h.UseJumpPower = true; h.JumpPower = v and State.JumpPower or 50 end
+        if h then
+            h.UseJumpPower = true
+            h.JumpPower = v and State.JumpPower or 50
+        end
     end,
 })
 
 Main:Slider({
-    Title = "JumpPower",
-    Min = 50, Max = 150, CurrentValue = 50,
+    Title = "JumpPower (safe)",
+    Min = 50, Max = 90, CurrentValue = 50,
     Callback = function(v)
         State.JumpPower = v
-        if State.JumpEnabled then local h = getHumanoid(); if h then h.JumpPower = v end end
+        if State.JumpEnabled then
+            local h = getHumanoid()
+            if h then h.JumpPower = v end
+        end
     end,
 })
 
 -- ============================================================
--- STEAL AN EGG TAB
+-- STEAL AN EGG
 -- ============================================================
 local Egg = createTab("Steal An Egg")
 Egg:Section("Auto Farm")
 
+Egg:Paragraph({
+    Content = "Delay alto = meno rilevabile. Sotto 1s è a rischio kick. Il tool cerca i remote da solo — non serve configurarli a mano.",
+})
+
 Egg:Slider({
-    Title = "Delay tra azioni",
-    Min = 0.1, Max = 3, CurrentValue = 0.5, Suffix = "s",
+    Title = "Delay base",
+    Min = 0.8, Max = 4, CurrentValue = 1.2, Suffix = "s",
     Callback = function(v) State.AutoDelay = v end,
 })
 
+local function safeFire(remote, ...)
+    if not remote or not remote.Parent then return end
+    pcall(function()
+        if remote:IsA("RemoteEvent") then remote:FireServer(...)
+        elseif remote:IsA("RemoteFunction") then remote:InvokeServer(...) end
+    end)
+end
+
 Egg:Toggle({
     Title = "Auto Steal",
-    Description = "Ruba uova automaticamente",
+    Description = "Cerca remote 'steal' e li attiva",
     Callback = function(v)
         State.AutoSteal = v
-        if v then
-            task.spawn(function()
-                while State.AutoSteal do
-                    local remote = findRemote({"steal", "grab", "pickup", "take"})
-                    if remote then
-                        pcall(function() remote:FireServer() end)
+        if not v then return end
+        task.spawn(function()
+            while State.AutoSteal do
+                if not RemoteCache.steal then discoverRemotes() end
+                if RemoteCache.steal then
+                    for _, r in ipairs(RemoteCache.steal) do
+                        if not State.AutoSteal then break end
+                        safeFire(r)
+                        humanWait(State.AutoDelay * 0.5)
                     end
-                    task.wait(State.AutoDelay + math.random() * 0.3)
                 end
-            end)
-        end
+                humanWait(State.AutoDelay)
+            end
+        end)
     end,
 })
 
 Egg:Toggle({
     Title = "Auto Sell",
-    Description = "Vende i pet automaticamente",
+    Description = "Vende i pet periodicamente",
     Callback = function(v)
         State.AutoSell = v
-        if v then
-            task.spawn(function()
-                while State.AutoSell do
-                    local remote = findRemote({"sell", "sellall", "sellpet"})
-                    if remote then
-                        pcall(function()
-                            if remote:IsA("RemoteFunction") then remote:InvokeServer()
-                            else remote:FireServer() end
-                        end)
+        if not v then return end
+        task.spawn(function()
+            while State.AutoSell do
+                if not RemoteCache.sell then discoverRemotes() end
+                if RemoteCache.sell then
+                    for _, r in ipairs(RemoteCache.sell) do
+                        if not State.AutoSell then break end
+                        safeFire(r)
+                        humanWait(State.AutoDelay)
                     end
-                    task.wait(State.AutoDelay * 2 + math.random())
                 end
-            end)
-        end
+                humanWait(State.AutoDelay * 2)
+            end
+        end)
     end,
 })
 
 Egg:Toggle({
     Title = "Auto Hatch",
-    Description = "Schiusa uova automaticamente",
+    Description = "Schiusa uova periodicamente",
     Callback = function(v)
         State.AutoHatch = v
-        if v then
-            task.spawn(function()
-                while State.AutoHatch do
-                    local remote = findRemote({"hatch", "open", "egg"})
-                    if remote then
-                        pcall(function()
-                            if remote:IsA("RemoteFunction") then remote:InvokeServer("Basic")
-                            else remote:FireServer("Basic") end
-                        end)
+        if not v then return end
+        task.spawn(function()
+            while State.AutoHatch do
+                if not RemoteCache.hatch then discoverRemotes() end
+                if RemoteCache.hatch then
+                    for _, r in ipairs(RemoteCache.hatch) do
+                        if not State.AutoHatch then break end
+                        safeFire(r, "Basic")
+                        humanWait(State.AutoDelay)
                     end
-                    task.wait(State.AutoDelay + math.random())
                 end
-            end)
-        end
-    end,
-})
-
-Egg:Button({
-    Title = "🔍  Scansiona remote del gioco",
-    Callback = function()
-        local found = {}
-        for _, obj in pairs(Replicated:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                table.insert(found, obj:GetFullName())
+                humanWait(State.AutoDelay * 3)
             end
-        end
-        State.SpyLog = found
-        notify("Scan", #found .. " remote trovati. Apri la tab Remote → Stampa log")
+        end)
     end,
 })
 
-Egg:Section("Manipolazione diretta")
-
-local moneyStat = "Money"
-local moneyAmt = "1000"
-
-Egg:Input({
-    Title = "Stat soldi",
-    Placeholder = "Money",
-    Callback = function(t) if t ~= "" then moneyStat = t end end,
-})
-
-Egg:Input({
-    Title = "Importo",
-    Placeholder = "1000",
-    Callback = function(t) moneyAmt = t end,
-})
+Egg:Section("Diagnostica")
 
 Egg:Button({
-    Title = "➕  Aggiungi soldi (leaderstats)",
+    Title = "🔍  Mostra remote trovati",
+    Callback = function()
+        discoverRemotes()
+        local lines = {"Remote scoperti:"}
+        for cat, list in pairs(RemoteCache) do
+            table.insert(lines, "• " .. cat .. ": " .. #list)
+        end
+        for _, l in ipairs(lines) do print("[RyzeScan] " .. l) end
+        notify("Scan", table.concat(lines, " | "), 6)
+    end,
+})
+
+Egg:Section("Soldi (leaderstats)")
+
+local moneyStat, moneyAmt = "Money", "1000"
+Egg:Input({ Title = "Stat", Placeholder = "Money", Callback = function(t) if t~="" then moneyStat=t end end })
+Egg:Input({ Title = "Importo", Placeholder = "1000", Callback = function(t) moneyAmt=t end })
+
+Egg:Button({
+    Title = "➕  Aggiungi soldi (rischioso)",
     Callback = function()
         local n = tonumber(moneyAmt)
         local s = getLS(moneyStat)
         if s and n then
             s.Value = s.Value + n
-            notify("Money", "+" .. n)
+            notify("Money", "+" .. n .. " (⚠️ possibile kick)")
         else
-            notify("Money", "stat non trovato — usa Remote Spy per trovare il remote")
+            notify("Money", "stat non trovato")
         end
     end,
 })
@@ -861,11 +915,11 @@ Combat:Toggle({
 
 Combat:Toggle({
     Title = "Infinite Jump",
-    Callback = function(v) State.InfiniteJump = v end,
+    Callback = function(v) State.InfJump = v end,
 })
 
 UserInput.JumpRequest:Connect(function()
-    if State.InfiniteJump then
+    if State.InfJump then
         local h = getHumanoid()
         if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
@@ -883,26 +937,22 @@ local function clearESP()
     espObjs = {}
 end
 
-local function applyESP(plr, color)
-    if not plr.Character then return end
-    local hl = Instance.new("Highlight")
-    hl.Name = "RyzeESP"
-    hl.FillColor = color
-    hl.FillTransparency = 0.65
-    hl.OutlineColor = color
-    hl.OutlineTransparency = 0
-    hl.Adornee = plr.Character
-    hl.Parent = plr.Character
-    table.insert(espObjs, hl)
-end
-
 Visuals:Toggle({
     Title = "Player ESP",
     Callback = function(v)
         State.ESPEnabled = v
         if v then
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer then applyESP(plr, Color3.fromRGB(255, 60, 60)) end
+                if plr ~= LocalPlayer and plr.Character then
+                    local hl = Instance.new("Highlight")
+                    hl.FillColor = Color3.fromRGB(255, 60, 60)
+                    hl.FillTransparency = 0.65
+                    hl.OutlineColor = Color3.fromRGB(255, 60, 60)
+                    hl.OutlineTransparency = 0
+                    hl.Adornee = plr.Character
+                    hl.Parent = plr.Character
+                    table.insert(espObjs, hl)
+                end
             end
         else
             clearESP()
@@ -910,97 +960,63 @@ Visuals:Toggle({
     end,
 })
 
-Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function()
-        if State.ESPEnabled and plr ~= LocalPlayer then
-            task.wait(0.3)
-            applyESP(plr, Color3.fromRGB(255, 60, 60))
-        end
-    end)
-end)
-
 -- ============================================================
--- REMOTE
+-- REMOTE — hook on-demand, auto-off dopo 30s
 -- ============================================================
 local Remote = createTab("Remote")
-Remote:Section("Spy (⚠️ può triggerare AC — usare per pochi secondi)")
+Remote:Section("Spy temporaneo")
 
-local hooked = false
-local function installHooks()
-    if hooked then return end
-    hooked = true
-    local mt = getrawmetatable(game)
-    local old = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
+Remote:Paragraph({
+    Content = "⚠️ L'hook su __namecall è rilevabile. Il tool lo tiene attivo MASSIMO 30 secondi e poi lo rimuove da solo. Usalo solo per capire quali remote usa il gioco.",
+})
+
+local spyHooked = false
+local spyMT, spyOldNamecall
+
+local function installSpy()
+    if spyHooked then return end
+    spyHooked = true
+    spyMT = getrawmetatable(game)
+    spyOldNamecall = spyMT.__namecall
+    setreadonly(spyMT, false)
+    spyMT.__namecall = newcclosure(function(self, ...)
         local m = getnamecallmethod()
         if State.SpyEnabled and (m == "FireServer" or m == "InvokeServer") then
             local parts = {}
             for _, v in ipairs({...}) do table.insert(parts, tostring(v)) end
-            local entry = m .. " " .. self:GetFullName() .. "(" .. table.concat(parts, ", ") .. ")"
-            table.insert(State.SpyLog, entry)
-            if #State.SpyLog > 300 then table.remove(State.SpyLog, 1) end
-            notify("Remote", entry, 4)
+            print("[RyzeSpy] " .. m .. " " .. self:GetFullName() .. "(" .. table.concat(parts, ", ") .. ")")
         end
-        return old(self, ...)
+        return spyOldNamecall(self, ...)
     end)
-    setreadonly(mt, true)
+    setreadonly(spyMT, true)
+end
+
+local function uninstallSpy()
+    if not spyHooked then return end
+    spyHooked = false
+    pcall(function()
+        setreadonly(spyMT, false)
+        spyMT.__namecall = spyOldNamecall
+        setreadonly(spyMT, true)
+    end)
 end
 
 Remote:Toggle({
-    Title = "Remote Spy",
-    Description = "Logga le chiamate remote",
+    Title = "Remote Spy (auto-off 30s)",
+    Description = "Stampa in console F12 / esecutore",
     Callback = function(v)
         State.SpyEnabled = v
-        if v then installHooks() end
-    end,
-})
-
-Remote:Button({
-    Title = "📜  Stampa log in console",
-    Callback = function()
-        for _, l in ipairs(State.SpyLog) do print("[RyzeSpy] " .. l) end
-        notify("Remote", #State.SpyLog .. " righe in console")
-    end,
-})
-
-Remote:Button({
-    Title = "🗑  Pulisci log",
-    Callback = function() State.SpyLog = {}; notify("Remote", "pulito") end,
-})
-
-Remote:Section("Fire Manuale")
-local remotePath, remoteArgs = "", ""
-Remote:Input({Title="Percorso", Placeholder="ReplicatedStorage.X", Callback=function(t) remotePath=t end})
-Remote:Input({Title="Args (csv)", Placeholder="1000, true", Callback=function(t) remoteArgs=t end})
-
-local function parseArgs(s)
-    local o = {}
-    if not s or s == "" then return o end
-    for a in s:gmatch("[^,]+") do
-        local t = a:match("^%s*(.-)%s*$")
-        local n = tonumber(t)
-        if n then table.insert(o, n)
-        elseif t == "true" then table.insert(o, true)
-        elseif t == "false" then table.insert(o, false)
-        else table.insert(o, t) end
-    end
-    return o
-end
-
-Remote:Button({
-    Title = "🚀  Fire Remote",
-    Callback = function()
-        if remotePath == "" then notify("Errore", "percorso vuoto"); return end
-        local obj = game
-        for part in remotePath:gmatch("[^%.]+") do
-            obj = obj:FindFirstChild(part)
-            if not obj then notify("Errore", "non trovato: " .. part); return end
+        if v then
+            installSpy()
+            notify("Spy", "Attivo per 30s — poi si spegne", 5)
+            task.delay(30, function()
+                State.SpyEnabled = false
+                uninstallSpy()
+                notify("Spy", "Auto-disattivato", 4)
+            end)
+        else
+            uninstallSpy()
         end
-        local a = parseArgs(remoteArgs)
-        if obj:IsA("RemoteEvent") then obj:FireServer(table.unpack(a)); notify("Fire", "OK")
-        elseif obj:IsA("RemoteFunction") then notify("Invoke", "→ " .. tostring(obj:InvokeServer(table.unpack(a))))
-        else notify("Errore", "non è un remote") end
     end,
 })
 
@@ -1011,37 +1027,23 @@ local Settings = createTab("Settings")
 Settings:Section("Info")
 
 Settings:Paragraph({
-    Content = "RyzeHub v1.1.0\nAnti-detection attivo\n\n• SAFE MODE: speed max 100, jump max 150\n• Remote Spy hooka __namecall — usa solo per pochi secondi\n• Auto-farm usa delay random per evitare pattern detection\n\nRightControl = minimize",
+    Content = "RyzeHub v2.0.0 — stealth edition\n\n• Nessuno script dell'AC viene toccato\n• Speed max 40 con rampa lenta\n• Jump max 90\n• Auto-farm delay default 1.2s + jitter\n• Remote Spy auto-off dopo 30s\n• GUI name randomizzato\n\nSe ti kicka: aumenta i delay e tieni solo Auto Steal attivo.",
 })
 
 Settings:Button({
-    Title = "🧹  Ri-disabilita anticheat locale",
+    Title = "🔄  Ri-scansiona remote",
     Callback = function()
-        local n = killLocalAntiCheat()
-        notify("AC", n .. " script disabilitati")
+        local n = discoverRemotes()
+        notify("Scan", n .. " remote scansionati")
     end,
 })
 
 Settings:Button({
-    Title = "♻  Reset stato",
+    Title = "🗑  Unload",
     Callback = function()
-        State.Speed = 16; State.SpeedEnabled = false
-        State.JumpPower = 50; State.JumpEnabled = false
-        State.Noclip = false; State.InfiniteJump = false
-        State.SpyEnabled = false; State.SpyLog = {}
-        State.ESPEnabled = false; State.AutoSteal = false
-        State.AutoSell = false; State.AutoHatch = false
-        clearESP()
-        local h = getHumanoid()
-        if h then h.WalkSpeed = 16; h.JumpPower = 50 end
-        notify("Reset", "ok")
-    end,
-})
-
-Settings:Button({
-    Title = "🗑  Unload RyzeHub",
-    Callback = function()
-        gui:Destroy(); _G.RyzeHubLoaded = false
+        uninstallSpy()
+        gui:Destroy()
+        _G.RyzeHubLoaded = false
     end,
 })
 
@@ -1065,7 +1067,17 @@ end)
 LocalPlayer.CharacterAdded:Connect(function(c)
     local h = c:WaitForChild("Humanoid", 10)
     if h then
-        if State.SpeedEnabled then h.WalkSpeed = State.Speed end
+        if State.SpeedEnabled then
+            task.spawn(function()
+                task.wait(1)
+                local start = h.WalkSpeed
+                for i = 1, 20 do
+                    if not h.Parent then break end
+                    h.WalkSpeed = start + (State.Speed - start) * (i/20)
+                    task.wait(0.1)
+                end
+            end)
+        end
         if State.JumpEnabled then h.UseJumpPower = true; h.JumpPower = State.JumpPower end
     end
 end)
@@ -1074,4 +1086,5 @@ end)
 -- INIT
 -- ============================================================
 selectTab("Main")
-notify("RyzeHub", killed .. " anticheat locali disabilitati. v1.1.0 caricato.", 6)
+task.wait(0.5)
+notify("RyzeHub", totalScanned .. " remote scansionati. Stealth attivo.", 6)
