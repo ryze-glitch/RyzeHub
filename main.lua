@@ -1,168 +1,679 @@
--- language: Lua, file: main.lua, target: Roblox Steal An Egg + universale
--- *RyzeHub Core — caricato dal loader, non incollare direttamente*
+-- language: Lua, file: main.lua, target: Roblox
+-- RyzeHub v1.0.0 — UI custom, zero dipendenze
 
-if _G.RyzeHubLoaded then
-    warn("[RyzeHub] già caricato")
-    return
-end
+if _G.RyzeHubLoaded then return end
 _G.RyzeHubLoaded = true
 
--- ============================================================
--- CONFIG
--- ============================================================
-local CONFIG = {
-    Name       = "RyzeHub",
-    Version    = "1.0.0",
-    Author     = "Lunar",
-    Accent     = Color3.fromRGB(120, 90, 255),   -- viola elettrico
-    Background = Color3.fromRGB(18, 18, 24),
-    Text       = Color3.fromRGB(235, 235, 245),
-    SubText    = Color3.fromRGB(140, 140, 160),
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInput = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ============ COLORS ============
+local C = {
+    bg    = Color3.fromRGB(15, 15, 22),
+    bg2   = Color3.fromRGB(22, 22, 32),
+    bg3   = Color3.fromRGB(30, 30, 42),
+    bg4   = Color3.fromRGB(40, 40, 55),
+    accent = Color3.fromRGB(130, 100, 255),
+    accent2 = Color3.fromRGB(160, 130, 255),
+    text  = Color3.fromRGB(240, 240, 250),
+    subtext = Color3.fromRGB(150, 150, 170),
+    danger = Color3.fromRGB(240, 80, 90),
+    font  = Enum.Font.Gotham,
+    fontBold = Enum.Font.GothamBold,
 }
 
--- ============================================================
--- SERVICES
--- ============================================================
-local Players        = game:GetService("Players")
-local Replicated     = game:GetService("ReplicatedStorage")
-local RunService     = game:GetService("RunService")
-local UserInput      = game:GetService("UserInputService")
-local TweenService   = game:GetService("TweenService")
-local CoreGui        = game:GetService("CoreGui")
-local LocalPlayer    = Players.LocalPlayer
-
--- ============================================================
--- FLUENT UI (fallback a Rayfield se non disponibile)
--- ============================================================
-local Fluent
-local ok = pcall(function()
-    Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-end)
-
-if not ok or not Fluent then
-    warn("[RyzeHub] Fluent UI non disponibile — uso fallback minimale")
-    -- Fallback Rayfield
-    Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/Rayfield/main/Rayfield.lua"))()
+-- ============ HELPERS ============
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    c.Parent = p
+    return c
 end
 
--- ============================================================
--- STATE
--- ============================================================
-local State = {
-    Speed         = 16,
-    SpeedEnabled  = false,
-    JumpPower     = 50,
-    JumpEnabled   = false,
-    SpyEnabled    = false,
-    SpyLog        = {},
-    InfiniteJump  = false,
-    Noclip        = false,
-    LastHumanoid  = nil,
-}
-
--- ============================================================
--- GUI — WINDOW
--- ============================================================
-local Window
-if Fluent.CreateWindow then
-    -- Fluent API
-    Window = Fluent:CreateWindow({
-        Title = CONFIG.Name .. " — " .. CONFIG.Version,
-        SubTitle = "by " .. CONFIG.Author,
-        TabWidth = 160,
-        Size = UDim2.fromOffset(580, 460),
-        Acrylic = true,
-        Theme = "Dark",
-        MinimizeKey = Enum.KeyCode.RightControl,
-    })
-else
-    -- Rayfield API
-    Window = Fluent:CreateWindow({
-        Name = CONFIG.Name .. " — " .. CONFIG.Version,
-        LoadingTitle = "RyzeHub",
-        LoadingSubtitle = "by " .. CONFIG.Author,
-        ConfigurationSaving = { Enabled = false },
-    })
+local function stroke(p, color, thick)
+    local s = Instance.new("UIStroke")
+    s.Color = color or C.bg4
+    s.Thickness = thick or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = p
+    return s
 end
 
--- ============================================================
--- TABS
--- ============================================================
-local function mkTab(name, icon)
-    if Window.CreateTab and Window.Tabs == nil then
-        -- Fluent
-        return Window:CreateTab(name, icon)
-    else
-        -- Rayfield
-        return Window:CreateTab(name, icon)
-    end
+local function tw(o, t, props, style)
+    TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
 
-local Tabs = {
-    Main     = Window:CreateTab("Main", 4483362458),
-    Combat   = Window:CreateTab("Combat", 4483362458),
-    Visuals  = Window:CreateTab("Visuals", 4483362458),
-    Remote   = Window:CreateTab("Remote", 4483362458),
-    Settings = Window:CreateTab("Settings", 4483362458),
-}
+-- ============ ROOT GUI ============
+local parentGui = (gethui and gethui()) or game:GetService("CoreGui")
+local gui = Instance.new("ScreenGui")
+gui.Name = "RyzeHub_" .. tostring(math.random(1000, 9999))
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999999
+pcall(function() gui.Parent = parentGui end)
+if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
--- ============================================================
--- HELPERS
--- ============================================================
+-- ============ NOTIFICATIONS ============
+local notifHolder = Instance.new("Frame")
+notifHolder.Size = UDim2.new(0, 320, 1, -40)
+notifHolder.Position = UDim2.new(1, -340, 0, 20)
+notifHolder.BackgroundTransparency = 1
+notifHolder.Parent = gui
+
+local notifLayout = Instance.new("UIListLayout")
+notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+notifLayout.Padding = UDim.new(0, 8)
+notifLayout.Parent = notifHolder
+
 local function notify(title, content, duration)
     duration = duration or 4
-    if Fluent.Notify then
-        Fluent:Notify({ Title = title, Content = content, Duration = duration })
+    local n = Instance.new("Frame")
+    n.Size = UDim2.new(1, 0, 0, 60)
+    n.BackgroundColor3 = C.bg2
+    n.BorderSizePixel = 0
+    n.BackgroundTransparency = 1
+    n.Parent = notifHolder
+    corner(n, 10)
+    stroke(n, C.bg4, 1)
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 3, 1, -16)
+    bar.Position = UDim2.new(0, 8, 0, 8)
+    bar.BackgroundColor3 = C.accent
+    bar.BorderSizePixel = 0
+    bar.BackgroundTransparency = 1
+    bar.Parent = n
+    corner(bar, 2)
+
+    local tLbl = Instance.new("TextLabel")
+    tLbl.Size = UDim2.new(1, -30, 0, 20)
+    tLbl.Position = UDim2.new(0, 18, 0, 8)
+    tLbl.BackgroundTransparency = 1
+    tLbl.Text = title
+    tLbl.TextColor3 = C.text
+    tLbl.Font = C.fontBold
+    tLbl.TextSize = 14
+    tLbl.TextXAlignment = Enum.TextXAlignment.Left
+    tLbl.TextTransparency = 1
+    tLbl.Parent = n
+
+    local cLbl = Instance.new("TextLabel")
+    cLbl.Size = UDim2.new(1, -30, 0, 24)
+    cLbl.Position = UDim2.new(0, 18, 0, 28)
+    cLbl.BackgroundTransparency = 1
+    cLbl.Text = content
+    cLbl.TextColor3 = C.subtext
+    cLbl.Font = C.font
+    cLbl.TextSize = 12
+    cLbl.TextXAlignment = Enum.TextXAlignment.Left
+    cLbl.TextWrapped = true
+    cLbl.TextTransparency = 1
+    cLbl.Parent = n
+
+    local info = TweenInfo.new(0.3)
+    TweenService:Create(n, info, {BackgroundTransparency = 0}):Play()
+    TweenService:Create(bar, info, {BackgroundTransparency = 0}):Play()
+    TweenService:Create(tLbl, info, {TextTransparency = 0}):Play()
+    TweenService:Create(cLbl, info, {TextTransparency = 0}):Play()
+
+    task.delay(duration, function()
+        local o = TweenInfo.new(0.3)
+        TweenService:Create(n, o, {BackgroundTransparency = 1}):Play()
+        TweenService:Create(bar, o, {BackgroundTransparency = 1}):Play()
+        TweenService:Create(tLbl, o, {TextTransparency = 1}):Play()
+        TweenService:Create(cLbl, o, {TextTransparency = 1}):Play()
+        task.wait(0.35); n:Destroy()
+    end)
+end
+
+-- ============ WINDOW ============
+local W, H = 620, 420
+local win = Instance.new("Frame")
+win.Size = UDim2.new(0, W, 0, H)
+win.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
+win.BackgroundColor3 = C.bg
+win.BorderSizePixel = 0
+win.Parent = gui
+corner(win, 14)
+stroke(win, C.bg4, 1)
+
+-- glow
+local glow = Instance.new("ImageLabel")
+glow.Size = UDim2.new(1, 60, 1, 60)
+glow.Position = UDim2.new(0, -30, 0, -30)
+glow.BackgroundTransparency = 1
+glow.Image = "rbxassetid://5028857084"
+glow.ImageColor3 = C.accent
+glow.ImageTransparency = 0.82
+glow.ScaleType = Enum.ScaleType.Slice
+glow.SliceCenter = Rect.new(24, 24, 276, 276)
+glow.ZIndex = 0
+glow.Parent = win
+
+-- top bar
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 48)
+topBar.BackgroundColor3 = C.bg2
+topBar.BorderSizePixel = 0
+topBar.Parent = win
+corner(topBar, 14)
+
+local patch = Instance.new("Frame")
+patch.Size = UDim2.new(1, 0, 0, 14)
+patch.Position = UDim2.new(0, 0, 1, -14)
+patch.BackgroundColor3 = C.bg2
+patch.BorderSizePixel = 0
+patch.Parent = topBar
+
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(1, -20, 0, 1)
+sep.Position = UDim2.new(0, 10, 1, -1)
+sep.BackgroundColor3 = C.bg4
+sep.BorderSizePixel = 0
+sep.Parent = win
+
+-- logo
+local logo = Instance.new("Frame")
+logo.Size = UDim2.new(0, 22, 0, 22)
+logo.Position = UDim2.new(0, 18, 0.5, -11)
+logo.BackgroundColor3 = C.accent
+logo.BorderSizePixel = 0
+logo.Parent = topBar
+corner(logo, 6)
+
+local logoInner = Instance.new("Frame")
+logoInner.Size = UDim2.new(0, 10, 0, 10)
+logoInner.Position = UDim2.new(0.5, -5, 0.5, -5)
+logoInner.BackgroundColor3 = C.bg
+logoInner.BorderSizePixel = 0
+logoInner.Parent = logo
+corner(logoInner, 3)
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(0, 200, 1, 0)
+titleLbl.Position = UDim2.new(0, 50, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "RyzeHub"
+titleLbl.TextColor3 = C.text
+titleLbl.Font = C.fontBold
+titleLbl.TextSize = 16
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Parent = topBar
+
+local verLbl = Instance.new("TextLabel")
+verLbl.Size = UDim2.new(0, 60, 1, 0)
+verLbl.Position = UDim2.new(0, 128, 0, 0)
+verLbl.BackgroundTransparency = 1
+verLbl.Text = "v1.0.0"
+verLbl.TextColor3 = C.subtext
+verLbl.Font = C.font
+verLbl.TextSize = 11
+verLbl.TextXAlignment = Enum.TextXAlignment.Left
+verLbl.Parent = topBar
+
+local function makeBtn(xPos, color, symbol, cb)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 28, 0, 28)
+    b.Position = UDim2.new(1, xPos, 0.5, -14)
+    b.BackgroundColor3 = C.bg3
+    b.Text = symbol
+    b.TextColor3 = color
+    b.Font = C.fontBold
+    b.TextSize = 16
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    b.Parent = topBar
+    corner(b, 8)
+    b.MouseEnter:Connect(function() tw(b, 0.15, {BackgroundColor3 = color, TextColor3 = C.bg}) end)
+    b.MouseLeave:Connect(function() tw(b, 0.15, {BackgroundColor3 = C.bg3, TextColor3 = color}) end)
+    b.MouseButton1Click:Connect(cb)
+    return b
+end
+
+local minBtn = makeBtn(-78, C.subtext, "—", function() end)
+local closeBtn = makeBtn(-44, C.danger, "✕", function()
+    gui:Destroy()
+    _G.RyzeHubLoaded = false
+end)
+
+-- sidebar
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, 150, 1, -68)
+sidebar.Position = UDim2.new(0, 10, 0, 58)
+sidebar.BackgroundColor3 = C.bg2
+sidebar.BorderSizePixel = 0
+sidebar.Parent = win
+corner(sidebar, 10)
+
+local sLayout = Instance.new("UIListLayout")
+sLayout.Padding = UDim.new(0, 6)
+sLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sLayout.Parent = sidebar
+
+local sPad = Instance.new("UIPadding")
+sPad.PaddingTop = UDim.new(0, 10)
+sPad.PaddingLeft = UDim.new(0, 8)
+sPad.PaddingRight = UDim.new(0, 8)
+sPad.Parent = sidebar
+
+-- content
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -180, 1, -68)
+content.Position = UDim2.new(0, 170, 0, 58)
+content.BackgroundTransparency = 1
+content.Parent = win
+
+local cLayout = Instance.new("UIListLayout")
+cLayout.Padding = UDim.new(0, 8)
+cLayout.SortOrder = Enum.SortOrder.LayoutOrder
+cLayout.Parent = content
+
+local cPad = Instance.new("UIPadding")
+cPad.PaddingTop = UDim.new(0, 4)
+cPad.PaddingRight = UDim.new(0, 10)
+cPad.PaddingBottom = UDim.new(0, 10)
+cPad.Parent = content
+
+-- ============ TAB SYSTEM ============
+local tabs, tabBtns = {}, {}
+local activeTab = nil
+
+local function selectTab(name)
+    if activeTab == name then return end
+    activeTab = name
+    for n, t in pairs(tabs) do t.Visible = (n == name) end
+    for n, b in pairs(tabBtns) do
+        local on = (n == name)
+        tw(b, 0.15, {BackgroundColor3 = on and C.accent or C.bg3})
+        b.TextColor3 = on and C.text or C.subtext
     end
 end
 
-local function getChar()
-    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local function createTab(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = C.bg3
+    btn.Text = "  " .. name
+    btn.TextColor3 = C.subtext
+    btn.Font = C.fontBold
+    btn.TextSize = 13
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = sidebar
+    corner(btn, 8)
+    btn.MouseEnter:Connect(function()
+        if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg4}) end
+    end)
+    btn.MouseLeave:Connect(function()
+        if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg3}) end
+    end)
+    btn.MouseButton1Click:Connect(function() selectTab(name) end)
+    tabBtns[name] = btn
+
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = C.accent
+    page.Visible = false
+    page.Parent = content
+
+    local pLayout = Instance.new("UIListLayout")
+    pLayout.Padding = UDim.new(0, 8)
+    pLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pLayout.Parent = page
+
+    tabs[name] = page
+
+    local api = {}
+    local order = 0
+    local function nextOrder() order = order + 1; return order end
+
+    function api:Section(text)
+        local s = Instance.new("Frame")
+        s.Size = UDim2.new(1, 0, 0, 28)
+        s.BackgroundTransparency = 1
+        s.LayoutOrder = nextOrder()
+        s.Parent = page
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 0, 20)
+        l.Position = UDim2.new(0, 4, 0, 4)
+        l.BackgroundTransparency = 1
+        l.Text = string.upper(text)
+        l.TextColor3 = C.accent
+        l.Font = C.fontBold
+        l.TextSize = 11
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Parent = s
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, -8, 0, 1)
+        line.Position = UDim2.new(0, 4, 1, -2)
+        line.BackgroundColor3 = C.bg4
+        line.BorderSizePixel = 0
+        line.Parent = s
+    end
+
+    function api:Toggle(o)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 44)
+        row.BackgroundColor3 = C.bg2
+        row.BorderSizePixel = 0
+        row.LayoutOrder = nextOrder()
+        row.Parent = page
+        corner(row, 8); stroke(row, C.bg4, 1)
+
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -80, 0, 20)
+        t.Position = UDim2.new(0, 14, 0, 6)
+        t.BackgroundTransparency = 1
+        t.Text = o.Title or "Toggle"
+        t.TextColor3 = C.text
+        t.Font = C.fontBold
+        t.TextSize = 13
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = row
+
+        if o.Description then
+            local d = Instance.new("TextLabel")
+            d.Size = UDim2.new(1, -80, 0, 14)
+            d.Position = UDim2.new(0, 14, 0, 24)
+            d.BackgroundTransparency = 1
+            d.Text = o.Description
+            d.TextColor3 = C.subtext
+            d.Font = C.font
+            d.TextSize = 11
+            d.TextXAlignment = Enum.TextXAlignment.Left
+            d.Parent = row
+        end
+
+        local state = o.CurrentValue or false
+        local sw = Instance.new("Frame")
+        sw.Size = UDim2.new(0, 40, 0, 22)
+        sw.Position = UDim2.new(1, -54, 0.5, -11)
+        sw.BackgroundColor3 = state and C.accent or C.bg4
+        sw.BorderSizePixel = 0
+        sw.Parent = row
+        corner(sw, 11)
+
+        local kn = Instance.new("Frame")
+        kn.Size = UDim2.new(0, 16, 0, 16)
+        kn.Position = state and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+        kn.BackgroundColor3 = C.text
+        kn.BorderSizePixel = 0
+        kn.Parent = sw
+        corner(kn, 8)
+
+        local clk = Instance.new("TextButton")
+        clk.Size = UDim2.new(1, 0, 1, 0)
+        clk.BackgroundTransparency = 1
+        clk.Text = ""
+        clk.Parent = row
+        clk.MouseButton1Click:Connect(function()
+            state = not state
+            tw(sw, 0.2, {BackgroundColor3 = state and C.accent or C.bg4})
+            tw(kn, 0.2, {Position = state and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)})
+            if o.Callback then o.Callback(state) end
+        end)
+    end
+
+    function api:Slider(o)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 56)
+        row.BackgroundColor3 = C.bg2
+        row.BorderSizePixel = 0
+        row.LayoutOrder = nextOrder()
+        row.Parent = page
+        corner(row, 8); stroke(row, C.bg4, 1)
+
+        local minV, maxV = o.Min or 0, o.Max or 100
+        local val = o.CurrentValue or minV
+        local suf = o.Suffix or ""
+
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -100, 0, 20)
+        t.Position = UDim2.new(0, 14, 0, 6)
+        t.BackgroundTransparency = 1
+        t.Text = o.Title or "Slider"
+        t.TextColor3 = C.text
+        t.Font = C.fontBold
+        t.TextSize = 13
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = row
+
+        local vl = Instance.new("TextLabel")
+        vl.Size = UDim2.new(0, 80, 0, 20)
+        vl.Position = UDim2.new(1, -94, 0, 6)
+        vl.BackgroundTransparency = 1
+        vl.Text = tostring(val) .. suf
+        vl.TextColor3 = C.accent
+        vl.Font = C.fontBold
+        vl.TextSize = 12
+        vl.TextXAlignment = Enum.TextXAlignment.Right
+        vl.Parent = row
+
+        local bg = Instance.new("Frame")
+        bg.Size = UDim2.new(1, -28, 0, 6)
+        bg.Position = UDim2.new(0, 14, 0, 36)
+        bg.BackgroundColor3 = C.bg4
+        bg.BorderSizePixel = 0
+        bg.Parent = row
+        corner(bg, 3)
+
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((val - minV)/(maxV - minV), 0, 1, 0)
+        fill.BackgroundColor3 = C.accent
+        fill.BorderSizePixel = 0
+        fill.Parent = bg
+        corner(fill, 3)
+
+        local kn = Instance.new("Frame")
+        kn.Size = UDim2.new(0, 14, 0, 14)
+        kn.AnchorPoint = Vector2.new(0.5, 0.5)
+        kn.Position = UDim2.new((val - minV)/(maxV - minV), 0, 0.5, 0)
+        kn.BackgroundColor3 = C.text
+        kn.BorderSizePixel = 0
+        kn.Parent = bg
+        corner(kn, 7)
+
+        local clk = Instance.new("TextButton")
+        clk.Size = UDim2.new(1, 0, 0, 30)
+        clk.Position = UDim2.new(0, 0, 0, 24)
+        clk.BackgroundTransparency = 1
+        clk.Text = ""
+        clk.Parent = row
+
+        local dragging = false
+        local function update(x)
+            local rel = math.clamp((x - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+            local nv = math.floor(minV + (maxV - minV) * rel)
+            if nv ~= val then
+                val = nv
+                vl.Text = tostring(val) .. suf
+                fill.Size = UDim2.new(rel, 0, 1, 0)
+                kn.Position = UDim2.new(rel, 0, 0.5, 0)
+                if o.Callback then o.Callback(val) end
+            end
+        end
+
+        clk.MouseButton1Down:Connect(function()
+            dragging = true
+            update(UserInput:GetMouseLocation().X)
+        end)
+        UserInput.InputChanged:Connect(function(i)
+            if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+                update(i.Position.X)
+            end
+        end)
+        UserInput.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        end)
+    end
+
+    function api:Button(o)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, 0, 0, 40)
+        b.BackgroundColor3 = C.bg2
+        b.Text = o.Title or "Button"
+        b.TextColor3 = C.text
+        b.Font = C.fontBold
+        b.TextSize = 13
+        b.BorderSizePixel = 0
+        b.AutoButtonColor = false
+        b.LayoutOrder = nextOrder()
+        b.Parent = page
+        corner(b, 8); stroke(b, C.bg4, 1)
+        b.MouseEnter:Connect(function() tw(b, 0.15, {BackgroundColor3 = C.bg3, TextColor3 = C.accent2}) end)
+        b.MouseLeave:Connect(function() tw(b, 0.15, {BackgroundColor3 = C.bg2, TextColor3 = C.text}) end)
+        b.MouseButton1Click:Connect(function() if o.Callback then o.Callback() end end)
+    end
+
+    function api:Input(o)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 44)
+        row.BackgroundColor3 = C.bg2
+        row.BorderSizePixel = 0
+        row.LayoutOrder = nextOrder()
+        row.Parent = page
+        corner(row, 8); stroke(row, C.bg4, 1)
+
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(0, 120, 1, 0)
+        t.Position = UDim2.new(0, 14, 0, 0)
+        t.BackgroundTransparency = 1
+        t.Text = o.Title or "Input"
+        t.TextColor3 = C.text
+        t.Font = C.fontBold
+        t.TextSize = 13
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = row
+
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, -160, 0, 30)
+        box.Position = UDim2.new(0, 146, 0.5, -15)
+        box.BackgroundColor3 = C.bg3
+        box.Text = ""
+        box.PlaceholderText = o.Placeholder or "..."
+        box.PlaceholderColor3 = C.subtext
+        box.TextColor3 = C.text
+        box.Font = C.font
+        box.TextSize = 12
+        box.BorderSizePixel = 0
+        box.ClearTextOnFocus = false
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.Parent = row
+        corner(box, 6); stroke(box, C.bg4, 1)
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 8)
+        pad.Parent = box
+
+        box.Focused:Connect(function()
+            tw(box, 0.15, {BackgroundColor3 = C.bg4})
+        end)
+        box.FocusLost:Connect(function()
+            tw(box, 0.15, {BackgroundColor3 = C.bg3})
+            if o.Callback then o.Callback(box.Text) end
+        end)
+    end
+
+    function api:Paragraph(o)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 0)
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.BackgroundColor3 = C.bg2
+        row.BorderSizePixel = 0
+        row.LayoutOrder = nextOrder()
+        row.Parent = page
+        corner(row, 8); stroke(row, C.bg4, 1)
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop = UDim.new(0, 10)
+        pad.PaddingBottom = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 14)
+        pad.PaddingRight = UDim.new(0, 14)
+        pad.Parent = row
+
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 0, 0)
+        l.AutomaticSize = Enum.AutomaticSize.Y
+        l.BackgroundTransparency = 1
+        l.Text = o.Content or ""
+        l.TextColor3 = C.subtext
+        l.Font = C.font
+        l.TextSize = 12
+        l.TextWrapped = true
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.TextYAlignment = Enum.TextYAlignment.Top
+        l.Parent = row
+    end
+
+    return api
 end
+
+-- ============ DRAG ============
+local dragging, dragStart, startPos
+topBar.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = i.Position
+        startPos = win.Position
+        i.Changed:Connect(function()
+            if i.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInput.InputChanged:Connect(function(i)
+    if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local d = i.Position - dragStart
+        win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+-- ============ STATE ============
+local State = {
+    Speed = 16, SpeedEnabled = false,
+    JumpPower = 50, JumpEnabled = false,
+    SpyEnabled = false, SpyLog = {},
+    InfiniteJump = false, Noclip = false,
+    ESPEnabled = false,
+}
 
 local function getHumanoid()
-    local char = getChar()
-    if char then
-        return char:FindFirstChildOfClass("Humanoid")
-    end
-    return nil
+    local c = LocalPlayer.Character
+    if c then return c:FindFirstChildOfClass("Humanoid") end
 end
 
-local function getLeaderstat(name)
+local function getLS(name)
     local ls = LocalPlayer:FindFirstChild("leaderstats")
     if not ls then return nil end
     return ls:FindFirstChild(name)
 end
 
--- ============================================================
--- TAB: MAIN — SPEED & MONEY
--- ============================================================
-local MainSection = Tabs.Main:CreateSection("Movement")
+-- ============ MAIN TAB ============
+local Main = createTab("Main")
+Main:Section("Movement")
 
-Tabs.Main:CreateToggle({
+Main:Toggle({
     Title = "Speed Enabled",
     Description = "Applica WalkSpeed personalizzato",
-    CurrentValue = false,
-    Flag = "SpeedEnabled",
     Callback = function(v)
         State.SpeedEnabled = v
         local h = getHumanoid()
-        if h then
-            h.WalkSpeed = v and State.Speed or 16
-        end
+        if h then h.WalkSpeed = v and State.Speed or 16 end
     end,
 })
 
-Tabs.Main:CreateSlider({
+Main:Slider({
     Title = "WalkSpeed",
-    Description = "Velocità di movimento",
-    Range = {16, 300},
-    Increment = 1,
-    Suffix = " studs/s",
-    CurrentValue = 16,
-    Flag = "SpeedSlider",
+    Min = 16, Max = 300, CurrentValue = 16, Suffix = " studs",
     Callback = function(v)
         State.Speed = v
         if State.SpeedEnabled then
@@ -172,29 +683,9 @@ Tabs.Main:CreateSlider({
     end,
 })
 
-Tabs.Main:CreateInput({
-    Title = "Velocità esatta",
-    Description = "Imposta un valore preciso",
-    Placeholder = "es. 75",
-    RemoveTextAfterFocusLost = false,
-    Flag = "SpeedInput",
-    Callback = function(txt)
-        local n = tonumber(txt)
-        if n then
-            State.Speed = n
-            if State.SpeedEnabled then
-                local h = getHumanoid()
-                if h then h.WalkSpeed = n end
-            end
-        end
-    end,
-})
-
-Tabs.Main:CreateToggle({
-    Title = "JumpPower boost",
+Main:Toggle({
+    Title = "JumpPower Boost",
     Description = "Salto potenziato",
-    CurrentValue = false,
-    Flag = "JumpEnabled",
     Callback = function(v)
         State.JumpEnabled = v
         local h = getHumanoid()
@@ -205,12 +696,9 @@ Tabs.Main:CreateToggle({
     end,
 })
 
-Tabs.Main:CreateSlider({
+Main:Slider({
     Title = "JumpPower",
-    Range = {50, 500},
-    Increment = 5,
-    CurrentValue = 50,
-    Flag = "JumpSlider",
+    Min = 50, Max = 500, CurrentValue = 50,
     Callback = function(v)
         State.JumpPower = v
         if State.JumpEnabled then
@@ -220,54 +708,30 @@ Tabs.Main:CreateSlider({
     end,
 })
 
--- MONEY
-local MoneySection = Tabs.Main:CreateSection("Money — leaderstats")
-
-local function listLeaderstats()
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if not ls then return {} end
-    local names = {}
-    for _, v in pairs(ls:GetChildren()) do
-        if v:IsA("ValueBase") then
-            table.insert(names, v.Name)
-        end
-    end
-    return names
-end
+Main:Section("Money")
 
 local moneyTarget = "Money"
-local moneyNames = listLeaderstats()
+local moneyAmount = "1000"
 
-Tabs.Main:CreateDropdown({
-    Title = "Stat da modificare",
-    Options = #moneyNames > 0 and moneyNames or {"Money", "Cash", "Coins"},
-    CurrentOption = {"Money"},
-    Flag = "MoneyStat",
-    Callback = function(opt)
-        moneyTarget = opt
-    end,
+Main:Input({
+    Title = "Stat name",
+    Placeholder = "Money",
+    Callback = function(txt) if txt ~= "" then moneyTarget = txt end end,
 })
 
-local MoneyInputValue = "1000"
-
-Tabs.Main:CreateInput({
+Main:Input({
     Title = "Importo",
-    Placeholder = "es. 10000",
-    RemoveTextAfterFocusLost = false,
-    Flag = "MoneyAmount",
-    Callback = function(txt)
-        MoneyInputValue = txt
-    end,
+    Placeholder = "1000",
+    Callback = function(txt) moneyAmount = txt end,
 })
 
-Tabs.Main:CreateButton({
-    Title = "Aggiungi soldi",
-    Description = "Somma l'importo allo stat",
+Main:Button({
+    Title = "➕  Aggiungi soldi",
     Callback = function()
-        local n = tonumber(MoneyInputValue)
-        local stat = getLeaderstat(moneyTarget)
-        if stat and n then
-            stat.Value = stat.Value + n
+        local n = tonumber(moneyAmount)
+        local s = getLS(moneyTarget)
+        if s and n then
+            s.Value = s.Value + n
             notify("Money", "+" .. n .. " " .. moneyTarget)
         else
             notify("Money", "stat non trovato: " .. moneyTarget)
@@ -275,14 +739,13 @@ Tabs.Main:CreateButton({
     end,
 })
 
-Tabs.Main:CreateButton({
-    Title = "Imposta soldi",
-    Description = "Sostituisci il valore",
+Main:Button({
+    Title = "💾  Imposta soldi",
     Callback = function()
-        local n = tonumber(MoneyInputValue)
-        local stat = getLeaderstat(moneyTarget)
-        if stat and n then
-            stat.Value = n
+        local n = tonumber(moneyAmount)
+        local s = getLS(moneyTarget)
+        if s and n then
+            s.Value = n
             notify("Money", moneyTarget .. " = " .. n)
         else
             notify("Money", "stat non trovato: " .. moneyTarget)
@@ -290,27 +753,22 @@ Tabs.Main:CreateButton({
     end,
 })
 
--- ============================================================
--- TAB: COMBAT
--- ============================================================
-Tabs.Combat:CreateSection("Character")
+-- ============ COMBAT TAB ============
+local Combat = createTab("Combat")
+Combat:Section("Character")
 
-Tabs.Combat:CreateToggle({
+Combat:Toggle({
     Title = "Noclip",
     Description = "Attraversa i muri",
-    CurrentValue = false,
-    Flag = "Noclip",
     Callback = function(v)
         State.Noclip = v
         if v then
             task.spawn(function()
                 while State.Noclip do
-                    local char = LocalPlayer.Character
-                    if char then
-                        for _, p in pairs(char:GetDescendants()) do
-                            if p:IsA("BasePart") and p.CanCollide then
-                                p.CanCollide = false
-                            end
+                    local c = LocalPlayer.Character
+                    if c then
+                        for _, p in pairs(c:GetDescendants()) do
+                            if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
                         end
                     end
                     RunService.Stepped:Wait()
@@ -320,14 +778,10 @@ Tabs.Combat:CreateToggle({
     end,
 })
 
-Tabs.Combat:CreateToggle({
+Combat:Toggle({
     Title = "Infinite Jump",
     Description = "Salto infinito in aria",
-    CurrentValue = false,
-    Flag = "InfJump",
-    Callback = function(v)
-        State.InfiniteJump = v
-    end,
+    Callback = function(v) State.InfiniteJump = v end,
 })
 
 UserInput.JumpRequest:Connect(function()
@@ -337,53 +791,46 @@ UserInput.JumpRequest:Connect(function()
     end
 end)
 
-Tabs.Combat:CreateButton({
-    Title = "Reset character",
+Combat:Button({
+    Title = "💀  Reset Character",
     Callback = function()
         local h = getHumanoid()
         if h then h.Health = 0 end
     end,
 })
 
--- ============================================================
--- TAB: VISUALS
--- ============================================================
-Tabs.Visuals:CreateSection("ESP")
+-- ============ VISUALS TAB ============
+local Visuals = createTab("Visuals")
+Visuals:Section("ESP")
 
-local espEnabled = false
-local espObjects = {}
+local espObjs = {}
+local function clearESP()
+    for _, v in pairs(espObjs) do pcall(function() v:Destroy() end) end
+    espObjs = {}
+end
 
-local function createESP(part, color)
-    if not part or not part:IsA("BasePart") then return end
+local function applyESP(plr, color)
+    if not plr.Character then return end
     local hl = Instance.new("Highlight")
     hl.Name = "RyzeESP"
     hl.FillColor = color
-    hl.FillTransparency = 0.7
+    hl.FillTransparency = 0.65
     hl.OutlineColor = color
     hl.OutlineTransparency = 0
-    hl.Adornee = part
-    hl.Parent = part
-    table.insert(espObjects, hl)
+    hl.Adornee = plr.Character
+    hl.Parent = plr.Character
+    table.insert(espObjs, hl)
 end
 
-local function clearESP()
-    for _, v in pairs(espObjects) do
-        if v then v:Destroy() end
-    end
-    espObjects = {}
-end
-
-Tabs.Visuals:CreateToggle({
+Visuals:Toggle({
     Title = "Player ESP",
     Description = "Evidenzia i giocatori",
-    CurrentValue = false,
-    Flag = "PlayerESP",
     Callback = function(v)
-        espEnabled = v
+        State.ESPEnabled = v
         if v then
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and plr.Character then
-                    createESP(plr.Character:FindFirstChild("HumanoidRootPart"), plr.Team and plr.Team.TeamColor.Color or Color3.fromRGB(255, 60, 60))
+                if plr ~= LocalPlayer then
+                    applyESP(plr, Color3.fromRGB(255, 60, 60))
                 end
             end
         else
@@ -393,196 +840,169 @@ Tabs.Visuals:CreateToggle({
 })
 
 Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function(char)
-        if espEnabled and plr ~= LocalPlayer then
-            task.wait(0.5)
-            createESP(char:FindFirstChild("HumanoidRootPart"), Color3.fromRGB(255, 60, 60))
+    plr.CharacterAdded:Connect(function()
+        if State.ESPEnabled and plr ~= LocalPlayer then
+            task.wait(0.3)
+            applyESP(plr, Color3.fromRGB(255, 60, 60))
         end
     end)
 end)
 
--- ============================================================
--- TAB: REMOTE SPY
--- ============================================================
-Tabs.Remote:CreateSection("Spy")
+-- ============ REMOTE TAB ============
+local Remote = createTab("Remote")
+Remote:Section("Spy")
 
-local remoteEventConn
-local hookInstalled = false
-
+local hooked = false
 local function installHooks()
-    if hookInstalled then return end
-    hookInstalled = true
-
+    if hooked then return end
+    hooked = true
     local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
+    local old = mt.__namecall
     setreadonly(mt, false)
-
     mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if State.SpyEnabled and (method == "FireServer" or method == "InvokeServer") then
-            local args = {...}
+        local m = getnamecallmethod()
+        if State.SpyEnabled and (m == "FireServer" or m == "InvokeServer") then
             local parts = {}
-            for _, v in ipairs(args) do
-                table.insert(parts, tostring(v))
-            end
-            local entry = method .. " " .. self:GetFullName() .. "(" .. table.concat(parts, ", ") .. ")"
+            for _, v in ipairs({...}) do table.insert(parts, tostring(v)) end
+            local entry = m .. " " .. self:GetFullName() .. "(" .. table.concat(parts, ", ") .. ")"
             table.insert(State.SpyLog, entry)
-            if #State.SpyLog > 100 then table.remove(State.SpyLog, 1) end
+            if #State.SpyLog > 200 then table.remove(State.SpyLog, 1) end
             notify("Remote", entry, 4)
         end
-        return oldNamecall(self, ...)
+        return old(self, ...)
     end)
-
     setreadonly(mt, true)
 end
 
-Tabs.Remote:CreateToggle({
+Remote:Toggle({
     Title = "Remote Spy",
     Description = "Logga FireServer / InvokeServer",
-    CurrentValue = false,
-    Flag = "Spy",
     Callback = function(v)
         State.SpyEnabled = v
         if v then installHooks() end
     end,
 })
 
-Tabs.Remote:CreateButton({
-    Title = "Stampa log in console",
+Remote:Button({
+    Title = "📜  Stampa log in console",
     Callback = function()
-        for _, line in ipairs(State.SpyLog) do
-            print("[RyzeSpy] " .. line)
-        end
-        notify("Remote", #State.SpyLog .. " righe stampate in console")
+        for _, l in ipairs(State.SpyLog) do print("[RyzeSpy] " .. l) end
+        notify("Remote", #State.SpyLog .. " righe in console")
     end,
 })
 
-Tabs.Remote:CreateButton({
-    Title = "Pulisci log",
+Remote:Button({
+    Title = "🗑  Pulisci log",
     Callback = function()
         State.SpyLog = {}
         notify("Remote", "Log pulito")
     end,
 })
 
--- FIRE MANUALE
-Tabs.Remote:CreateSection("Fire manuale")
+Remote:Section("Fire Manuale")
 
-local remotePath = ""
-local remoteArgs = ""
+local remotePath, remoteArgs = "", ""
 
-Tabs.Remote:CreateInput({
-    Title = "Percorso remote",
-    Placeholder = "ReplicatedStorage.Remotes.AddMoney",
-    RemoveTextAfterFocusLost = false,
-    Flag = "RemotePath",
-    Callback = function(txt) remotePath = txt end,
+Remote:Input({
+    Title = "Percorso",
+    Placeholder = "ReplicatedStorage.Remotes.X",
+    Callback = function(t) remotePath = t end,
 })
 
-Tabs.Remote:CreateInput({
-    Title = "Argomenti (csv)",
+Remote:Input({
+    Title = "Args (csv)",
     Placeholder = "1000, true, hello",
-    RemoveTextAfterFocusLost = false,
-    Flag = "RemoteArgs",
-    Callback = function(txt) remoteArgs = txt end,
+    Callback = function(t) remoteArgs = t end,
 })
 
-local function parseArgs(str)
-    local out = {}
-    if not str or str == "" then return out end
-    for arg in str:gmatch("[^,]+") do
-        local trimmed = arg:match("^%s*(.-)%s*$")
-        local n = tonumber(trimmed)
-        if n then table.insert(out, n)
-        elseif trimmed == "true" then table.insert(out, true)
-        elseif trimmed == "false" then table.insert(out, false)
-        elseif trimmed == "nil" then table.insert(out, nil)
-        else table.insert(out, trimmed) end
+local function parseArgs(s)
+    local o = {}
+    if not s or s == "" then return o end
+    for a in s:gmatch("[^,]+") do
+        local t = a:match("^%s*(.-)%s*$")
+        local n = tonumber(t)
+        if n then table.insert(o, n)
+        elseif t == "true" then table.insert(o, true)
+        elseif t == "false" then table.insert(o, false)
+        else table.insert(o, t) end
     end
-    return out
+    return o
 end
 
-Tabs.Remote:CreateButton({
-    Title = "Fire Remote",
+Remote:Button({
+    Title = "🚀  Fire Remote",
     Callback = function()
-        if remotePath == "" then
-            notify("Errore", "Percorso vuoto"); return
-        end
+        if remotePath == "" then notify("Errore", "Percorso vuoto"); return end
         local obj = game
         for part in remotePath:gmatch("[^%.]+") do
             obj = obj:FindFirstChild(part)
-            if not obj then
-                notify("Errore", "non trovato: " .. part); return
-            end
+            if not obj then notify("Errore", "non trovato: " .. part); return end
         end
-        local args = parseArgs(remoteArgs)
+        local a = parseArgs(remoteArgs)
         if obj:IsA("RemoteEvent") then
-            obj:FireServer(table.unpack(args))
-            notify("Fire", "OK " .. remotePath)
+            obj:FireServer(table.unpack(a))
+            notify("Fire", "OK")
         elseif obj:IsA("RemoteFunction") then
-            local r = obj:InvokeServer(table.unpack(args))
-            notify("Invoke", remotePath .. " -> " .. tostring(r))
+            local r = obj:InvokeServer(table.unpack(a))
+            notify("Invoke", "→ " .. tostring(r))
         else
             notify("Errore", "non è un remote")
         end
     end,
 })
 
--- ============================================================
--- TAB: SETTINGS
--- ============================================================
-Tabs.Settings:CreateSection("RyzeHub")
+-- ============ SETTINGS TAB ============
+local Settings = createTab("Settings")
+Settings:Section("About")
 
-Tabs.Settings:CreateParagraph({
-    Title = "Informazioni",
-    Content = CONFIG.Name .. " v" .. CONFIG.Version .. "\nby " .. CONFIG.Author .. "\n\nTasto minimize: RightControl",
+Settings:Paragraph({
+    Content = "RyzeHub v1.0.0\nCustom UI, no external libraries.\n\nRightControl: minimize\nDrag dalla top bar per spostare.",
 })
 
-Tabs.Settings:CreateButton({
-    Title = "Reset stato interno",
+Settings:Button({
+    Title = "♻  Reset stato",
     Callback = function()
-        State.Speed = 16
-        State.SpeedEnabled = false
-        State.JumpPower = 50
-        State.JumpEnabled = false
-        State.Noclip = false
-        State.InfiniteJump = false
-        State.SpyEnabled = false
-        State.SpyLog = {}
+        State.Speed = 16; State.SpeedEnabled = false
+        State.JumpPower = 50; State.JumpEnabled = false
+        State.Noclip = false; State.InfiniteJump = false
+        State.SpyEnabled = false; State.SpyLog = {}
+        State.ESPEnabled = false; clearESP()
         local h = getHumanoid()
-        if h then
-            h.WalkSpeed = 16
-            h.JumpPower = 50
-        end
+        if h then h.WalkSpeed = 16; h.JumpPower = 50 end
         notify("Reset", "stato ripristinato")
     end,
 })
 
-Tabs.Settings:CreateButton({
-    Title = "Unload RyzeHub",
+Settings:Button({
+    Title = "🗑  Unload RyzeHub",
     Callback = function()
+        gui:Destroy()
         _G.RyzeHubLoaded = false
-        if Fluent.Destroy then Fluent:Destroy()
-        elseif Window.Destroy then Window:Destroy() end
-        clearESP()
     end,
 })
 
--- ============================================================
--- BOOT NOTIFY
--- ============================================================
-notify("RyzeHub", "v" .. CONFIG.Version .. " caricato. RightControl per minimizzare.", 6)
+-- ============ MINIMIZE ============
+local minimized = false
+local function toggleMin()
+    minimized = not minimized
+    tw(win, 0.25, {Size = minimized and UDim2.new(0, W, 0, 48) or UDim2.new(0, W, 0, H)})
+end
 
--- ============================================================
--- CHARACTER RESPAWN — riapplica speed
--- ============================================================
-LocalPlayer.CharacterAdded:Connect(function(char)
-    local h = char:WaitForChild("Humanoid", 10)
-    if h and State.SpeedEnabled then
-        h.WalkSpeed = State.Speed
-    end
-    if h and State.JumpEnabled then
-        h.UseJumpPower = true
-        h.JumpPower = State.JumpPower
+minBtn.MouseButton1Click:Connect(toggleMin)
+UserInput.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.RightControl then toggleMin() end
+end)
+
+-- ============ RESPAWN HOOKS ============
+LocalPlayer.CharacterAdded:Connect(function(c)
+    local h = c:WaitForChild("Humanoid", 10)
+    if h then
+        if State.SpeedEnabled then h.WalkSpeed = State.Speed end
+        if State.JumpEnabled then h.UseJumpPower = true; h.JumpPower = State.JumpPower end
     end
 end)
+
+-- ============ INIT ============
+selectTab("Main")
+notify("RyzeHub", "v1.0.0 caricato. RightControl per minimizzare.", 6)
