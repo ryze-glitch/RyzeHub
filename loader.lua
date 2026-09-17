@@ -3,7 +3,7 @@
 
 local CONFIG = {
     Version = "1.0.0",
-    CoreURL = "https://raw.githubusercontent.com/TUO-USER/RyzeHub/main/main.lua",
+    CoreURL = "https://raw.githubusercontent.com/ryze-glitch/RyzeHub/main/main.lua",
 }
 
 -- Anti-doppio caricamento
