@@ -1,5 +1,5 @@
 -- language: Lua, file: main.lua, target: Roblox Steal An Egg
--- RyzeHub v2.3.0 — CFrame Speed bypass, Auto Money Rewards, Instant Sell & Steal Engine
+-- RyzeHub v2.4.0 — Fixed Slider Drag, Fixed Prompt Trigger, Robust Touch & CFrame Engine
 
 if _G.RyzeHubLoaded then return end
 _G.RyzeHubLoaded = true
@@ -14,7 +14,7 @@ local CoreGui         = game:GetService("CoreGui")
 local LocalPlayer     = Players.LocalPlayer
 
 -- ============================================================
--- PARENT GUI ISOLATO
+-- PARENT GUI SICURO
 -- ============================================================
 local parentGui
 if gethui then
@@ -38,7 +38,7 @@ local function rndName()
 end
 
 -- ============================================================
--- TEMI E COMPONENTI
+-- TEMA
 -- ============================================================
 local C = {
     bg        = Color3.fromRGB(14, 14, 20),
@@ -77,7 +77,7 @@ local function tw(obj, dur, props, style)
 end
 
 -- ============================================================
--- GUI ROOT & NOTIFICHE
+-- GUI ROOT
 -- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = rndName()
@@ -143,23 +143,23 @@ local function notify(title, content, dur)
     c.TextTransparency = 1
     c.Parent = n
 
-    tw(n, 0.25, {BackgroundTransparency = 0})
-    tw(bar, 0.25, {BackgroundTransparency = 0})
-    tw(t, 0.25, {TextTransparency = 0})
-    tw(c, 0.25, {TextTransparency = 0})
+    tw(n, 0.2, {BackgroundTransparency = 0})
+    tw(bar, 0.2, {BackgroundTransparency = 0})
+    tw(t, 0.2, {TextTransparency = 0})
+    tw(c, 0.2, {TextTransparency = 0})
 
     task.delay(dur, function()
-        tw(n, 0.25, {BackgroundTransparency = 1})
-        tw(bar, 0.25, {BackgroundTransparency = 1})
-        tw(t, 0.25, {TextTransparency = 1})
-        tw(c, 0.25, {TextTransparency = 1})
-        task.wait(0.3)
+        tw(n, 0.2, {BackgroundTransparency = 1})
+        tw(bar, 0.2, {BackgroundTransparency = 1})
+        tw(t, 0.2, {TextTransparency = 1})
+        tw(c, 0.2, {TextTransparency = 1})
+        task.wait(0.25)
         n:Destroy()
     end)
 end
 
 -- ============================================================
--- MAIN WINDOW CONTAINER
+-- MAIN FRAME
 -- ============================================================
 local W, H = 600, 430
 local win = Instance.new("Frame")
@@ -208,7 +208,7 @@ local verLbl = Instance.new("TextLabel")
 verLbl.Size = UDim2.new(0, 60, 1, 0)
 verLbl.Position = UDim2.new(0, 115, 0, 0)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "v2.3.0"
+verLbl.Text = "v2.4.0"
 verLbl.TextColor3 = C.sub
 verLbl.Font = C.font
 verLbl.TextSize = 11
@@ -290,7 +290,7 @@ UserInput.InputChanged:Connect(function(i)
 end)
 
 -- ============================================================
--- TAB BUILDER
+-- BUILDER
 -- ============================================================
 local tabs, tabBtns = {}, {}
 local activeTab = nil
@@ -298,9 +298,7 @@ local activeTab = nil
 local function selectTab(name)
     if activeTab == name then return end
     activeTab = name
-    for n, page in pairs(tabs) do
-        page.Visible = (n == name)
-    end
+    for n, page in pairs(tabs) do page.Visible = (n == name) end
     for n, btn in pairs(tabBtns) do
         local isSel = (n == name)
         tw(btn, 0.15, {BackgroundColor3 = isSel and C.accent or C.bg3})
@@ -490,37 +488,47 @@ local function createTab(name)
         corner(bg, 2)
 
         local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((val - minV)/(maxV - minV), 0, 1, 0)
+        local startRel = math.clamp((val - minV)/(maxV - minV), 0, 1)
+        fill.Size = UDim2.new(startRel, 0, 1, 0)
         fill.BackgroundColor3 = C.accent
         fill.BorderSizePixel = 0
         fill.Parent = bg
         corner(fill, 2)
 
         local clk = Instance.new("TextButton")
-        clk.Size = UDim2.new(1, 0, 0, 20)
-        clk.Position = UDim2.new(0, 0, 0, 24)
+        clk.Size = UDim2.new(1, 0, 0, 24)
+        clk.Position = UDim2.new(0, 0, 0, 22)
         clk.BackgroundTransparency = 1
         clk.Text = ""
         clk.Parent = row
 
-        local draggingSlider = false
-        local function update(posX)
-            local rel = math.clamp((posX - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+        local isSliding = false
+        local function update(inputX)
+            local barPos = bg.AbsolutePosition.X
+            local barSize = bg.AbsoluteSize.X
+            local rel = math.clamp((inputX - barPos) / barSize, 0, 1)
             local nv = math.floor(minV + (maxV - minV) * rel)
-            if nv ~= val then
-                val = nv
-                vl.Text = tostring(val) .. suf
-                fill.Size = UDim2.new(rel, 0, 1, 0)
-                if o.Callback then o.Callback(val) end
-            end
+            val = nv
+            vl.Text = tostring(val) .. suf
+            fill.Size = UDim2.new(rel, 0, 1, 0)
+            if o.Callback then o.Callback(val) end
         end
 
-        clk.MouseButton1Down:Connect(function() draggingSlider = true; update(UserInput:GetMouseLocation().X) end)
-        UserInput.InputChanged:Connect(function(i)
-            if draggingSlider and i.UserInputType == Enum.UserInputType.MouseMovement then update(i.Position.X) end
+        clk.MouseButton1Down:Connect(function()
+            isSliding = true
+            update(UserInput:GetMouseLocation().X)
         end)
+
+        UserInput.InputChanged:Connect(function(i)
+            if isSliding and i.UserInputType == Enum.UserInputType.MouseMovement then
+                update(UserInput:GetMouseLocation().X)
+            end
+        end)
+
         UserInput.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = false end
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                isSliding = false
+            end
         end)
     end
 
@@ -571,19 +579,17 @@ local function createTab(name)
 end
 
 -- ============================================================
--- STATE ENGINE & CFRAME SPEED LOOP
+-- RUNTIME STATE & CORE ENGINE
 -- ============================================================
 local State = {
-    -- Movement & Bypass
     CFrameSpeed = false,
-    CFrameMultiplier = 2,
+    CFrameMultiplier = 3,
     Speed = 16,
     SpeedEnabled = false,
     JumpPower = 50,
     JumpEnabled = false,
     Noclip = false,
     InfJump = false,
-    -- Farm Engine
     AutoStealAll = false,
     AutoDeposit = false,
     AutoCollectPrompt = false,
@@ -591,8 +597,7 @@ local State = {
     SelectedEgg = "Common",
     EggESP = false,
     HomeCFrame = nil,
-    InteractRadius = 45,
-    -- Money Loops
+    InteractRadius = 50,
     AutoMoneyRewards = false,
     AutoFastSell = false,
 }
@@ -611,59 +616,61 @@ local function getHumanoid()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
--- RenderStepped CFrame mover — non tocca Humanoid.WalkSpeed
-RunService.RenderStepped:Connect(function(deltaTime)
+-- CFRAME VELOCITY LOOP
+RunService.Heartbeat:Connect(function(dt)
     if not State.CFrameSpeed then return end
-    local char = getChar()
-    if not char then return end
     local hum = getHumanoid()
     local root = getRoot()
     if hum and root and hum.MoveDirection.Magnitude > 0 then
-        root.CFrame = root.CFrame + (hum.MoveDirection * (State.CFrameMultiplier * 15 * deltaTime))
+        local moveDir = hum.MoveDirection.Unit
+        root.CFrame = root.CFrame + (moveDir * (State.CFrameMultiplier * 16 * dt))
     end
 end)
 
-local function triggerPrompt(prompt)
-    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+-- PROXIMITY PROMPT ENGINE
+local function activatePrompt(p)
+    if not p or not p:IsA("ProximityPrompt") then return end
+    p.RequiresLineOfSight = false
+    p.MaxActivationDistance = math.huge
     if fireproximityprompt then
-        fireproximityprompt(prompt)
+        fireproximityprompt(p)
     else
         pcall(function()
-            prompt:InputHoldBegin()
-            task.wait(prompt.HoldDuration + 0.05)
-            prompt:InputHoldEnd()
+            p:InputHoldBegin()
+            task.wait(p.HoldDuration + 0.05)
+            p:InputHoldEnd()
         end)
     end
 end
 
-local function isHoldingEgg()
+-- INVENTORY CHECK
+local function hasEgg()
     local c = getChar()
-    if not c then return false end
-    for _, item in pairs(c:GetChildren()) do
-        if item:IsA("Tool") or item.Name:lower():find("egg") then return true end
+    if c then
+        for _, obj in pairs(c:GetChildren()) do
+            if obj:IsA("Tool") or obj.Name:lower():find("egg") then return true end
+        end
     end
     local bp = LocalPlayer:FindFirstChild("Backpack")
     if bp then
-        for _, item in pairs(bp:GetChildren()) do
-            if item.Name:lower():find("egg") then return true end
+        for _, obj in pairs(bp:GetChildren()) do
+            if obj.Name:lower():find("egg") then return true end
         end
     end
     return false
 end
 
--- Scan e trigger per i remote Money & Claim
-local function triggerMoneyRemotes()
-    local keywords = {"claim", "daily", "reward", "collect", "gift", "income", "money"}
-    for _, obj in pairs(Replicated:GetDescendants()) do
-        if obj:IsA("RemoteEvent") then
-            local n = obj.Name:lower()
+-- MONEY & REWARD INVOCATION ENGINE
+local function runMoneyRemotes()
+    local keywords = {"reward", "claim", "daily", "collect", "gift", "income"}
+    for _, desc in pairs(Replicated:GetDescendants()) do
+        if desc:IsA("RemoteEvent") then
+            local n = desc.Name:lower()
             for _, kw in ipairs(keywords) do
                 if n:find(kw) then
-                    pcall(function()
-                        obj:FireServer()
-                        obj:FireServer(1)
-                        obj:FireServer("All")
-                    end)
+                    pcall(function() desc:FireServer() end)
+                    pcall(function() desc:FireServer(1) end)
+                    pcall(function() desc:FireServer("Daily") end)
                     break
                 end
             end
@@ -671,15 +678,15 @@ local function triggerMoneyRemotes()
     end
 end
 
--- Scan e trigger per il Sell rapido
-local function triggerSellRemotes()
-    local keywords = {"sell", "sellall", "sellallpets", "selleggs", "depositall"}
-    for _, obj in pairs(Replicated:GetDescendants()) do
-        if obj:IsA("RemoteEvent") then
-            local n = obj.Name:lower()
+local function runSellRemotes()
+    local keywords = {"sell", "deposit", "bank"}
+    for _, desc in pairs(Replicated:GetDescendants()) do
+        if desc:IsA("RemoteEvent") then
+            local n = desc.Name:lower()
             for _, kw in ipairs(keywords) do
                 if n:find(kw) then
-                    pcall(function() obj:FireServer() end)
+                    pcall(function() desc:FireServer() end)
+                    pcall(function() desc:FireServer(true) end)
                     break
                 end
             end
@@ -687,26 +694,18 @@ local function triggerSellRemotes()
     end
 end
 
--- Task Loops asincroni per Money
+-- BACKGROUND WORKERS
 task.spawn(function()
     while true do
-        if State.AutoMoneyRewards then
-            triggerMoneyRemotes()
-            task.wait(2.5)
-        else
-            task.wait(1)
-        end
+        if State.AutoMoneyRewards then runMoneyRemotes() end
+        task.wait(3)
     end
 end)
 
 task.spawn(function()
     while true do
-        if State.AutoFastSell then
-            triggerSellRemotes()
-            task.wait(1)
-        else
-            task.wait(1)
-        end
+        if State.AutoFastSell then runSellRemotes() end
+        task.wait(1.5)
     end
 end)
 
@@ -714,20 +713,20 @@ end)
 -- TAB 1: STEAL ENGINE
 -- ============================================================
 local StealTab = createTab("Steal Engine")
-StealTab:Section("Nido & Base")
+StealTab:Section("Base Settings")
 
 StealTab:Button({
-    Title = "📍 Salva Base Personale (Home)",
+    Title = "📍 Memorizza Mia Base (Home)",
     Callback = function()
         local r = getRoot()
         if r then
             State.HomeCFrame = r.CFrame
-            notify("Base Registrata", "Posizione salvata con successo!", 3)
+            notify("Base", "Posizione salvata a: " .. string.format("%.0f, %.0f, %.0f", r.Position.X, r.Position.Y, r.Position.Z), 3)
         end
     end
 })
 
-StealTab:Section("Automazione Raccolta")
+StealTab:Section("Raccolta Uova")
 
 StealTab:Toggle({
     Title = "Auto Grab (ProximityPrompt)",
@@ -738,15 +737,45 @@ StealTab:Toggle({
             while State.AutoCollectPrompt do
                 local root = getRoot()
                 if root then
-                    for _, prompt in pairs(Workspace:GetDescendants()) do
+                    for _, p in pairs(Workspace:GetDescendants()) do
                         if not State.AutoCollectPrompt then break end
-                        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                            local part = prompt.Parent
-                            if part and part:IsA("BasePart") then
-                                if (root.Position - part.Position).Magnitude <= State.InteractRadius then
-                                    triggerPrompt(prompt)
-                                    task.wait(0.08)
+                        if p:IsA("ProximityPrompt") and p.Enabled then
+                            local targetPart = p.Parent
+                            if targetPart and targetPart:IsA("BasePart") then
+                                if (root.Position - targetPart.Position).Magnitude <= State.InteractRadius then
+                                    activatePrompt(p)
+                                    task.wait(0.05)
                                 end
+                            end
+                        end
+                    end
+                end
+                task.wait(0.15)
+            end
+        end)
+    end
+})
+
+StealTab:Toggle({
+    Title = "Auto Touch Collide (Fisico)",
+    Callback = function(v)
+        State.AutoStealAll = v
+        if not v then return end
+        task.spawn(function()
+            while State.AutoStealAll do
+                local root = getRoot()
+                if root then
+                    for _, obj in pairs(Workspace:GetDescendants()) do
+                        if not State.AutoStealAll then break end
+                        if obj:IsA("BasePart") and (obj.Name:lower():find("egg") or (obj.Parent and obj.Parent.Name:lower():find("egg"))) then
+                            local isMyBase = false
+                            if State.HomeCFrame and (obj.Position - State.HomeCFrame.Position).Magnitude < 16 then
+                                isMyBase = true
+                            end
+                            if not isMyBase and (root.Position - obj.Position).Magnitude <= State.InteractRadius then
+                                firetouchinterest(root, obj, 0)
+                                task.wait(0.03)
+                                firetouchinterest(root, obj, 1)
                             end
                         end
                     end
@@ -758,96 +787,66 @@ StealTab:Toggle({
 })
 
 StealTab:Toggle({
-    Title = "Auto Touch Sweep (Nidi Nemici)",
-    Callback = function(v)
-        State.AutoStealAll = v
-        if not v then return end
-        task.spawn(function()
-            while State.AutoStealAll do
-                local root = getRoot()
-                if root then
-                    for _, obj in pairs(Workspace:GetDescendants()) do
-                        if not State.AutoStealAll then break end
-                        if obj:IsA("BasePart") and (obj.Name:lower():find("egg") or (obj.Parent and obj.Parent.Name:lower():find("egg"))) then
-                            local isSelf = false
-                            if State.HomeCFrame and (obj.Position - State.HomeCFrame.Position).Magnitude < 15 then
-                                isSelf = true
-                            end
-                            if not isSelf and (root.Position - obj.Position).Magnitude <= State.InteractRadius then
-                                firetouchinterest(root, obj, 0)
-                                task.wait(0.04)
-                                firetouchinterest(root, obj, 1)
-                            end
-                        end
-                    end
-                end
-                task.wait(0.25)
-            end
-        end)
-    end
-})
-
-StealTab:Toggle({
-    Title = "Instant Base Deposit",
+    Title = "Instant Base Deposit (Loop)",
     Callback = function(v)
         State.AutoDeposit = v
         if not v then return end
         task.spawn(function()
             while State.AutoDeposit do
-                if State.HomeCFrame and isHoldingEgg() then
+                if State.HomeCFrame and hasEgg() then
                     local root = getRoot()
                     if root then
-                        local origin = root.CFrame
+                        local lastPos = root.CFrame
                         root.CFrame = State.HomeCFrame
-                        task.wait(0.3)
-                        if root then root.CFrame = origin end
+                        task.wait(0.35)
+                        if root then root.CFrame = lastPos end
                     end
                 end
-                task.wait(0.5)
+                task.wait(0.4)
             end
         end)
     end
 })
 
 StealTab:Slider({
-    Title = "Raggio Rilevamento",
-    Min = 15, Max = 150, CurrentValue = 45, Suffix = " studs",
+    Title = "Raggio Azione (Studs)",
+    Min = 20, Max = 150, CurrentValue = 50, Suffix = " studs",
     Callback = function(v) State.InteractRadius = v end
 })
 
 -- ============================================================
--- TAB 2: MONEY & REWARDS
+-- TAB 2: MONEY & SELL
 -- ============================================================
 local MoneyTab = createTab("Money")
-MoneyTab:Section("Generazione Valuta")
+MoneyTab:Section("Cash Automation")
 
 MoneyTab:Toggle({
-    Title = "Auto Fast Sell (Eggs -> Cash)",
+    Title = "Auto Fast Sell (Loop)",
     Callback = function(v) State.AutoFastSell = v end
 })
 
 MoneyTab:Toggle({
-    Title = "Auto Claim Rewards & Income",
+    Title = "Auto Claim Rewards",
     Callback = function(v) State.AutoMoneyRewards = v end
 })
 
 MoneyTab:Button({
-    Title = "💸 Riscuoti Tutto (One-Shot)",
+    Title = "💸 Raccogli Tutte le Ricompense",
     Callback = function()
-        triggerMoneyRemotes()
-        triggerSellRemotes()
-        notify("Money", "Remote di Claim e Sell eseguiti.")
+        runMoneyRemotes()
+        runSellRemotes()
+        notify("Money", "Invocazione reward completata.")
     end
 })
 
 -- ============================================================
--- TAB 3: SHOP / HATCH
+-- TAB 3: HATCH
 -- ============================================================
 local ShopTab = createTab("Hatch")
-ShopTab:Section("Auto Buy")
+ShopTab:Section("Auto Unbox")
 
 ShopTab:Dropdown({
-    Title = "Uovo",
+    Title = "Tipo Uovo",
     Items = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"},
     Callback = function(val) State.SelectedEgg = val end
 })
@@ -860,7 +859,7 @@ ShopTab:Toggle({
         task.spawn(function()
             while State.AutoHatch do
                 for _, r in pairs(Replicated:GetDescendants()) do
-                    if r:IsA("RemoteEvent") and (r.Name:lower():find("hatch") or r.Name:lower():find("buyegg") or r.Name:lower():find("open")) then
+                    if r:IsA("RemoteEvent") and (r.Name:lower():find("hatch") or r.Name:lower():find("open") or r.Name:lower():find("buy")) then
                         pcall(function() r:FireServer(State.SelectedEgg, 1) end)
                     end
                 end
@@ -871,68 +870,23 @@ ShopTab:Toggle({
 })
 
 -- ============================================================
--- TAB 4: MOVEMENT & SPEED BYPASS
+-- TAB 4: MOVEMENT
 -- ============================================================
 local MoveTab = createTab("Movement")
-MoveTab:Section("Bypass Speed (CFrame)")
+MoveTab:Section("CFrame Speed (Anti-Kick)")
 
 MoveTab:Toggle({
-    Title = "CFrame Speed (Anti-Kick)",
+    Title = "CFrame Walk",
     Callback = function(v) State.CFrameSpeed = v end
 })
 
 MoveTab:Slider({
     Title = "CFrame Multiplier",
-    Min = 1, Max = 10, CurrentValue = 2, Suffix = "x",
+    Min = 1, Max = 8, CurrentValue = 3, Suffix = "x",
     Callback = function(v) State.CFrameMultiplier = v end
 })
 
-MoveTab:Section("Fisica Standard")
-
-MoveTab:Toggle({
-    Title = "Vanilla WalkSpeed",
-    Callback = function(v)
-        State.SpeedEnabled = v
-        local h = getHumanoid()
-        if h then h.WalkSpeed = v and State.Speed or 16 end
-    end
-})
-
-MoveTab:Slider({
-    Title = "WalkSpeed",
-    Min = 16, Max = 50, CurrentValue = 16, Suffix = " studs",
-    Callback = function(v)
-        State.Speed = v
-        if State.SpeedEnabled then
-            local h = getHumanoid()
-            if h then h.WalkSpeed = v end
-        end
-    end
-})
-
-MoveTab:Toggle({
-    Title = "JumpPower Boost",
-    Callback = function(v)
-        State.JumpEnabled = v
-        local h = getHumanoid()
-        if h then
-            h.UseJumpPower = true
-            h.JumpPower = v and State.JumpPower or 50
-        end
-    end
-})
-
-MoveTab:Slider({
-    Title = "JumpPower",
-    Min = 50, Max = 100, CurrentValue = 50,
-    Callback = function(v)
-        State.JumpPower = v
-        if State.JumpEnabled then
-            local h = getHumanoid()
-            if h then h.JumpPower = v end
-        end
-    end
-})
+MoveTab:Section("Fisica Base")
 
 MoveTab:Toggle({
     Title = "Noclip",
@@ -1000,7 +954,7 @@ VisTab:Toggle({
                             table.insert(eggHighlights, hl)
                         end
                     end
-                    task.wait(2)
+                    task.wait(2.5)
                 end
             end)
         else
@@ -1013,7 +967,7 @@ VisTab:Toggle({
 -- TAB 6: SETTINGS
 -- ============================================================
 local SetTab = createTab("Settings")
-SetTab:Section("Gestione")
+SetTab:Section("Script")
 
 SetTab:Button({
     Title = "Scarica Script (Unload)",
@@ -1024,19 +978,6 @@ SetTab:Button({
     end
 })
 
--- Handle Respawn
-LocalPlayer.CharacterAdded:Connect(function(c)
-    local h = c:WaitForChild("Humanoid", 5)
-    if h then
-        if State.SpeedEnabled then h.WalkSpeed = State.Speed end
-        if State.JumpEnabled then
-            h.UseJumpPower = true
-            h.JumpPower = State.JumpPower
-        end
-    end
-end)
-
--- Hotkey Toggle Window
 UserInput.InputBegan:Connect(function(i, gp)
     if gp then return end
     if i.KeyCode == Enum.KeyCode.RightControl then
@@ -1045,4 +986,4 @@ UserInput.InputBegan:Connect(function(i, gp)
 end)
 
 selectTab("Steal Engine")
-notify("RyzeHub Pro", "v2.3.0 attiva: CFrame Speed e Auto Money sbloccati.", 5)
+notify("RyzeHub Pro", "v2.4.0 caricata. Motore interazione e slider allineati.", 4)
