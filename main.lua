@@ -1,5 +1,5 @@
--- language: Lua, file: main.lua, target: Roblox
--- RyzeHub v1.0.0 — UI custom, zero dipendenze
+-- language: Lua, file: main.lua, target: Roblox Steal An Egg
+-- RyzeHub v1.1.0 — UI custom, anti-detection, SAFE MODE default
 
 if _G.RyzeHubLoaded then return end
 _G.RyzeHubLoaded = true
@@ -8,9 +8,42 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInput = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Replicated = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- ============ COLORS ============
+-- ============================================================
+-- ANTI-DETECTION: disabilita anticheat locale del gioco
+-- ============================================================
+local function killLocalAntiCheat()
+    local killed = 0
+    local targets = {
+        LocalPlayer:FindFirstChild("PlayerScripts"),
+        LocalPlayer:FindFirstChild("PlayerGui"),
+        Replicated,
+        game:GetService("StarterPlayer"),
+    }
+    for _, root in pairs(targets) do
+        if root then
+            for _, d in pairs(root:GetDescendants()) do
+                if d:IsA("LocalScript") or d:IsA("Script") then
+                    local n = d.Name:lower()
+                    if n:find("anticheat") or n:find("anti_cheat") or n:find("ac_")
+                       or n:find("guard") or n:find("detect") or n:find("monitor")
+                       or n:find("protection") or n:find("security") then
+                        pcall(function() d.Disabled = true; killed = killed + 1 end)
+                    end
+                end
+            end
+        end
+    end
+    return killed
+end
+
+local killed = killLocalAntiCheat()
+
+-- ============================================================
+-- COLORS
+-- ============================================================
 local C = {
     bg    = Color3.fromRGB(15, 15, 22),
     bg2   = Color3.fromRGB(22, 22, 32),
@@ -18,35 +51,22 @@ local C = {
     bg4   = Color3.fromRGB(40, 40, 55),
     accent = Color3.fromRGB(130, 100, 255),
     accent2 = Color3.fromRGB(160, 130, 255),
+    ok    = Color3.fromRGB(80, 220, 130),
     text  = Color3.fromRGB(240, 240, 250),
     subtext = Color3.fromRGB(150, 150, 170),
     danger = Color3.fromRGB(240, 80, 90),
+    warn  = Color3.fromRGB(250, 180, 60),
     font  = Enum.Font.Gotham,
     fontBold = Enum.Font.GothamBold,
 }
 
--- ============ HELPERS ============
-local function corner(p, r)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, r or 8)
-    c.Parent = p
-    return c
-end
+local function corner(p, r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 8); c.Parent=p; return c end
+local function stroke(p, c, t) local s=Instance.new("UIStroke"); s.Color=c or C.bg4; s.Thickness=t or 1; s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border; s.Parent=p; return s end
+local function tw(o,t,p,st) TweenService:Create(o,TweenInfo.new(t,st or Enum.EasingStyle.Quad,Enum.EasingDirection.Out),p):Play() end
 
-local function stroke(p, color, thick)
-    local s = Instance.new("UIStroke")
-    s.Color = color or C.bg4
-    s.Thickness = thick or 1
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = p
-    return s
-end
-
-local function tw(o, t, props, style)
-    TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
-
--- ============ ROOT GUI ============
+-- ============================================================
+-- ROOT
+-- ============================================================
 local parentGui = (gethui and gethui()) or game:GetService("CoreGui")
 local gui = Instance.new("ScreenGui")
 gui.Name = "RyzeHub_" .. tostring(math.random(1000, 9999))
@@ -57,13 +77,14 @@ gui.DisplayOrder = 999999
 pcall(function() gui.Parent = parentGui end)
 if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
--- ============ NOTIFICATIONS ============
+-- ============================================================
+-- NOTIFICATIONS
+-- ============================================================
 local notifHolder = Instance.new("Frame")
 notifHolder.Size = UDim2.new(0, 320, 1, -40)
 notifHolder.Position = UDim2.new(1, -340, 0, 20)
 notifHolder.BackgroundTransparency = 1
 notifHolder.Parent = gui
-
 local notifLayout = Instance.new("UIListLayout")
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
 notifLayout.Padding = UDim.new(0, 8)
@@ -77,8 +98,7 @@ local function notify(title, content, duration)
     n.BorderSizePixel = 0
     n.BackgroundTransparency = 1
     n.Parent = notifHolder
-    corner(n, 10)
-    stroke(n, C.bg4, 1)
+    corner(n, 10); stroke(n, C.bg4, 1)
 
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(0, 3, 1, -16)
@@ -130,7 +150,9 @@ local function notify(title, content, duration)
     end)
 end
 
--- ============ WINDOW ============
+-- ============================================================
+-- WINDOW
+-- ============================================================
 local W, H = 620, 420
 local win = Instance.new("Frame")
 win.Size = UDim2.new(0, W, 0, H)
@@ -138,10 +160,8 @@ win.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
 win.BackgroundColor3 = C.bg
 win.BorderSizePixel = 0
 win.Parent = gui
-corner(win, 14)
-stroke(win, C.bg4, 1)
+corner(win, 14); stroke(win, C.bg4, 1)
 
--- glow
 local glow = Instance.new("ImageLabel")
 glow.Size = UDim2.new(1, 60, 1, 60)
 glow.Position = UDim2.new(0, -30, 0, -30)
@@ -151,24 +171,20 @@ glow.ImageColor3 = C.accent
 glow.ImageTransparency = 0.82
 glow.ScaleType = Enum.ScaleType.Slice
 glow.SliceCenter = Rect.new(24, 24, 276, 276)
-glow.ZIndex = 0
 glow.Parent = win
 
--- top bar
 local topBar = Instance.new("Frame")
 topBar.Size = UDim2.new(1, 0, 0, 48)
 topBar.BackgroundColor3 = C.bg2
 topBar.BorderSizePixel = 0
 topBar.Parent = win
 corner(topBar, 14)
-
 local patch = Instance.new("Frame")
 patch.Size = UDim2.new(1, 0, 0, 14)
 patch.Position = UDim2.new(0, 0, 1, -14)
 patch.BackgroundColor3 = C.bg2
 patch.BorderSizePixel = 0
 patch.Parent = topBar
-
 local sep = Instance.new("Frame")
 sep.Size = UDim2.new(1, -20, 0, 1)
 sep.Position = UDim2.new(0, 10, 1, -1)
@@ -176,7 +192,6 @@ sep.BackgroundColor3 = C.bg4
 sep.BorderSizePixel = 0
 sep.Parent = win
 
--- logo
 local logo = Instance.new("Frame")
 logo.Size = UDim2.new(0, 22, 0, 22)
 logo.Position = UDim2.new(0, 18, 0.5, -11)
@@ -184,7 +199,6 @@ logo.BackgroundColor3 = C.accent
 logo.BorderSizePixel = 0
 logo.Parent = topBar
 corner(logo, 6)
-
 local logoInner = Instance.new("Frame")
 logoInner.Size = UDim2.new(0, 10, 0, 10)
 logoInner.Position = UDim2.new(0.5, -5, 0.5, -5)
@@ -205,15 +219,34 @@ titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 titleLbl.Parent = topBar
 
 local verLbl = Instance.new("TextLabel")
-verLbl.Size = UDim2.new(0, 60, 1, 0)
+verLbl.Size = UDim2.new(0, 80, 1, 0)
 verLbl.Position = UDim2.new(0, 128, 0, 0)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "v1.0.0"
+verLbl.Text = "v1.1.0"
 verLbl.TextColor3 = C.subtext
 verLbl.Font = C.font
 verLbl.TextSize = 11
 verLbl.TextXAlignment = Enum.TextXAlignment.Left
 verLbl.Parent = topBar
+
+local statusDot = Instance.new("Frame")
+statusDot.Size = UDim2.new(0, 8, 0, 8)
+statusDot.Position = UDim2.new(0, 220, 0.5, -4)
+statusDot.BackgroundColor3 = C.ok
+statusDot.BorderSizePixel = 0
+statusDot.Parent = topBar
+corner(statusDot, 4)
+
+local statusLbl = Instance.new("TextLabel")
+statusLbl.Size = UDim2.new(0, 100, 1, 0)
+statusLbl.Position = UDim2.new(0, 234, 0, 0)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = "SAFE MODE"
+statusLbl.TextColor3 = C.ok
+statusLbl.Font = C.fontBold
+statusLbl.TextSize = 10
+statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+statusLbl.Parent = topBar
 
 local function makeBtn(xPos, color, symbol, cb)
     local b = Instance.new("TextButton")
@@ -236,11 +269,9 @@ end
 
 local minBtn = makeBtn(-78, C.subtext, "—", function() end)
 local closeBtn = makeBtn(-44, C.danger, "✕", function()
-    gui:Destroy()
-    _G.RyzeHubLoaded = false
+    gui:Destroy(); _G.RyzeHubLoaded = false
 end)
 
--- sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 150, 1, -68)
 sidebar.Position = UDim2.new(0, 10, 0, 58)
@@ -248,37 +279,34 @@ sidebar.BackgroundColor3 = C.bg2
 sidebar.BorderSizePixel = 0
 sidebar.Parent = win
 corner(sidebar, 10)
-
 local sLayout = Instance.new("UIListLayout")
 sLayout.Padding = UDim.new(0, 6)
 sLayout.SortOrder = Enum.SortOrder.LayoutOrder
 sLayout.Parent = sidebar
-
 local sPad = Instance.new("UIPadding")
 sPad.PaddingTop = UDim.new(0, 10)
 sPad.PaddingLeft = UDim.new(0, 8)
 sPad.PaddingRight = UDim.new(0, 8)
 sPad.Parent = sidebar
 
--- content
 local content = Instance.new("Frame")
 content.Size = UDim2.new(1, -180, 1, -68)
 content.Position = UDim2.new(0, 170, 0, 58)
 content.BackgroundTransparency = 1
 content.Parent = win
-
 local cLayout = Instance.new("UIListLayout")
 cLayout.Padding = UDim.new(0, 8)
 cLayout.SortOrder = Enum.SortOrder.LayoutOrder
 cLayout.Parent = content
-
 local cPad = Instance.new("UIPadding")
 cPad.PaddingTop = UDim.new(0, 4)
 cPad.PaddingRight = UDim.new(0, 10)
 cPad.PaddingBottom = UDim.new(0, 10)
 cPad.Parent = content
 
--- ============ TAB SYSTEM ============
+-- ============================================================
+-- TABS
+-- ============================================================
 local tabs, tabBtns = {}, {}
 local activeTab = nil
 
@@ -306,12 +334,8 @@ local function createTab(name)
     btn.AutoButtonColor = false
     btn.Parent = sidebar
     corner(btn, 8)
-    btn.MouseEnter:Connect(function()
-        if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg4}) end
-    end)
-    btn.MouseLeave:Connect(function()
-        if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg3}) end
-    end)
+    btn.MouseEnter:Connect(function() if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg4}) end end)
+    btn.MouseLeave:Connect(function() if activeTab ~= name then tw(btn, 0.15, {BackgroundColor3 = C.bg3}) end end)
     btn.MouseButton1Click:Connect(function() selectTab(name) end)
     tabBtns[name] = btn
 
@@ -325,23 +349,21 @@ local function createTab(name)
     page.ScrollBarImageColor3 = C.accent
     page.Visible = false
     page.Parent = content
-
     local pLayout = Instance.new("UIListLayout")
     pLayout.Padding = UDim.new(0, 8)
     pLayout.SortOrder = Enum.SortOrder.LayoutOrder
     pLayout.Parent = page
 
     tabs[name] = page
-
     local api = {}
     local order = 0
-    local function nextOrder() order = order + 1; return order end
+    local function no() order = order + 1; return order end
 
     function api:Section(text)
         local s = Instance.new("Frame")
         s.Size = UDim2.new(1, 0, 0, 28)
         s.BackgroundTransparency = 1
-        s.LayoutOrder = nextOrder()
+        s.LayoutOrder = no()
         s.Parent = page
         local l = Instance.new("TextLabel")
         l.Size = UDim2.new(1, 0, 0, 20)
@@ -366,7 +388,7 @@ local function createTab(name)
         row.Size = UDim2.new(1, 0, 0, 44)
         row.BackgroundColor3 = C.bg2
         row.BorderSizePixel = 0
-        row.LayoutOrder = nextOrder()
+        row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
 
@@ -402,7 +424,6 @@ local function createTab(name)
         sw.BorderSizePixel = 0
         sw.Parent = row
         corner(sw, 11)
-
         local kn = Instance.new("Frame")
         kn.Size = UDim2.new(0, 16, 0, 16)
         kn.Position = state and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
@@ -429,7 +450,7 @@ local function createTab(name)
         row.Size = UDim2.new(1, 0, 0, 56)
         row.BackgroundColor3 = C.bg2
         row.BorderSizePixel = 0
-        row.LayoutOrder = nextOrder()
+        row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
 
@@ -466,14 +487,12 @@ local function createTab(name)
         bg.BorderSizePixel = 0
         bg.Parent = row
         corner(bg, 3)
-
         local fill = Instance.new("Frame")
         fill.Size = UDim2.new((val - minV)/(maxV - minV), 0, 1, 0)
         fill.BackgroundColor3 = C.accent
         fill.BorderSizePixel = 0
         fill.Parent = bg
         corner(fill, 3)
-
         local kn = Instance.new("Frame")
         kn.Size = UDim2.new(0, 14, 0, 14)
         kn.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -502,19 +521,9 @@ local function createTab(name)
                 if o.Callback then o.Callback(val) end
             end
         end
-
-        clk.MouseButton1Down:Connect(function()
-            dragging = true
-            update(UserInput:GetMouseLocation().X)
-        end)
-        UserInput.InputChanged:Connect(function(i)
-            if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-                update(i.Position.X)
-            end
-        end)
-        UserInput.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-        end)
+        clk.MouseButton1Down:Connect(function() dragging = true; update(UserInput:GetMouseLocation().X) end)
+        UserInput.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then update(i.Position.X) end end)
+        UserInput.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
     end
 
     function api:Button(o)
@@ -527,7 +536,7 @@ local function createTab(name)
         b.TextSize = 13
         b.BorderSizePixel = 0
         b.AutoButtonColor = false
-        b.LayoutOrder = nextOrder()
+        b.LayoutOrder = no()
         b.Parent = page
         corner(b, 8); stroke(b, C.bg4, 1)
         b.MouseEnter:Connect(function() tw(b, 0.15, {BackgroundColor3 = C.bg3, TextColor3 = C.accent2}) end)
@@ -540,7 +549,7 @@ local function createTab(name)
         row.Size = UDim2.new(1, 0, 0, 44)
         row.BackgroundColor3 = C.bg2
         row.BorderSizePixel = 0
-        row.LayoutOrder = nextOrder()
+        row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
 
@@ -570,18 +579,9 @@ local function createTab(name)
         box.TextXAlignment = Enum.TextXAlignment.Left
         box.Parent = row
         corner(box, 6); stroke(box, C.bg4, 1)
-
-        local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 8)
-        pad.Parent = box
-
-        box.Focused:Connect(function()
-            tw(box, 0.15, {BackgroundColor3 = C.bg4})
-        end)
-        box.FocusLost:Connect(function()
-            tw(box, 0.15, {BackgroundColor3 = C.bg3})
-            if o.Callback then o.Callback(box.Text) end
-        end)
+        local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 8); pad.Parent = box
+        box.Focused:Connect(function() tw(box, 0.15, {BackgroundColor3 = C.bg4}) end)
+        box.FocusLost:Connect(function() tw(box, 0.15, {BackgroundColor3 = C.bg3}); if o.Callback then o.Callback(box.Text) end end)
     end
 
     function api:Paragraph(o)
@@ -590,17 +590,13 @@ local function createTab(name)
         row.AutomaticSize = Enum.AutomaticSize.Y
         row.BackgroundColor3 = C.bg2
         row.BorderSizePixel = 0
-        row.LayoutOrder = nextOrder()
+        row.LayoutOrder = no()
         row.Parent = page
         corner(row, 8); stroke(row, C.bg4, 1)
-
         local pad = Instance.new("UIPadding")
-        pad.PaddingTop = UDim.new(0, 10)
-        pad.PaddingBottom = UDim.new(0, 10)
-        pad.PaddingLeft = UDim.new(0, 14)
-        pad.PaddingRight = UDim.new(0, 14)
+        pad.PaddingTop = UDim.new(0, 10); pad.PaddingBottom = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 14); pad.PaddingRight = UDim.new(0, 14)
         pad.Parent = row
-
         local l = Instance.new("TextLabel")
         l.Size = UDim2.new(1, 0, 0, 0)
         l.AutomaticSize = Enum.AutomaticSize.Y
@@ -618,16 +614,14 @@ local function createTab(name)
     return api
 end
 
--- ============ DRAG ============
+-- ============================================================
+-- DRAG
+-- ============================================================
 local dragging, dragStart, startPos
 topBar.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = i.Position
-        startPos = win.Position
-        i.Changed:Connect(function()
-            if i.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
+        dragging = true; dragStart = i.Position; startPos = win.Position
+        i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
 end)
 UserInput.InputChanged:Connect(function(i)
@@ -637,13 +631,17 @@ UserInput.InputChanged:Connect(function(i)
     end
 end)
 
--- ============ STATE ============
+-- ============================================================
+-- STATE
+-- ============================================================
 local State = {
     Speed = 16, SpeedEnabled = false,
     JumpPower = 50, JumpEnabled = false,
     SpyEnabled = false, SpyLog = {},
     InfiniteJump = false, Noclip = false,
     ESPEnabled = false,
+    AutoSteal = false, AutoSell = false, AutoHatch = false,
+    AutoDelay = 0.5,
 }
 
 local function getHumanoid()
@@ -657,13 +655,30 @@ local function getLS(name)
     return ls:FindFirstChild(name)
 end
 
--- ============ MAIN TAB ============
+-- ============================================================
+-- SAFE REMOTE FINDER — cerca remote per pattern
+-- ============================================================
+local function findRemote(patterns)
+    for _, obj in pairs(Replicated:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local n = obj.Name:lower()
+            for _, p in ipairs(patterns) do
+                if n:find(p) then return obj end
+            end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- MAIN TAB
+-- ============================================================
 local Main = createTab("Main")
-Main:Section("Movement")
+Main:Section("Movement (SAFE — cap 100)")
 
 Main:Toggle({
     Title = "Speed Enabled",
-    Description = "Applica WalkSpeed personalizzato",
+    Description = "WalkSpeed personalizzato (max 100 per non triggerare AC)",
     Callback = function(v)
         State.SpeedEnabled = v
         local h = getHumanoid()
@@ -673,93 +688,159 @@ Main:Toggle({
 
 Main:Slider({
     Title = "WalkSpeed",
-    Min = 16, Max = 300, CurrentValue = 16, Suffix = " studs",
+    Min = 16, Max = 100, CurrentValue = 16, Suffix = " studs",
     Callback = function(v)
         State.Speed = v
-        if State.SpeedEnabled then
-            local h = getHumanoid()
-            if h then h.WalkSpeed = v end
-        end
+        if State.SpeedEnabled then local h = getHumanoid(); if h then h.WalkSpeed = v end end
     end,
 })
 
 Main:Toggle({
     Title = "JumpPower Boost",
-    Description = "Salto potenziato",
     Callback = function(v)
         State.JumpEnabled = v
         local h = getHumanoid()
-        if h then
-            h.UseJumpPower = true
-            h.JumpPower = v and State.JumpPower or 50
-        end
+        if h then h.UseJumpPower = true; h.JumpPower = v and State.JumpPower or 50 end
     end,
 })
 
 Main:Slider({
     Title = "JumpPower",
-    Min = 50, Max = 500, CurrentValue = 50,
+    Min = 50, Max = 150, CurrentValue = 50,
     Callback = function(v)
         State.JumpPower = v
-        if State.JumpEnabled then
-            local h = getHumanoid()
-            if h then h.JumpPower = v end
+        if State.JumpEnabled then local h = getHumanoid(); if h then h.JumpPower = v end end
+    end,
+})
+
+-- ============================================================
+-- STEAL AN EGG TAB
+-- ============================================================
+local Egg = createTab("Steal An Egg")
+Egg:Section("Auto Farm")
+
+Egg:Slider({
+    Title = "Delay tra azioni",
+    Min = 0.1, Max = 3, CurrentValue = 0.5, Suffix = "s",
+    Callback = function(v) State.AutoDelay = v end,
+})
+
+Egg:Toggle({
+    Title = "Auto Steal",
+    Description = "Ruba uova automaticamente",
+    Callback = function(v)
+        State.AutoSteal = v
+        if v then
+            task.spawn(function()
+                while State.AutoSteal do
+                    local remote = findRemote({"steal", "grab", "pickup", "take"})
+                    if remote then
+                        pcall(function() remote:FireServer() end)
+                    end
+                    task.wait(State.AutoDelay + math.random() * 0.3)
+                end
+            end)
         end
     end,
 })
 
-Main:Section("Money")
-
-local moneyTarget = "Money"
-local moneyAmount = "1000"
-
-Main:Input({
-    Title = "Stat name",
-    Placeholder = "Money",
-    Callback = function(txt) if txt ~= "" then moneyTarget = txt end end,
+Egg:Toggle({
+    Title = "Auto Sell",
+    Description = "Vende i pet automaticamente",
+    Callback = function(v)
+        State.AutoSell = v
+        if v then
+            task.spawn(function()
+                while State.AutoSell do
+                    local remote = findRemote({"sell", "sellall", "sellpet"})
+                    if remote then
+                        pcall(function()
+                            if remote:IsA("RemoteFunction") then remote:InvokeServer()
+                            else remote:FireServer() end
+                        end)
+                    end
+                    task.wait(State.AutoDelay * 2 + math.random())
+                end
+            end)
+        end
+    end,
 })
 
-Main:Input({
+Egg:Toggle({
+    Title = "Auto Hatch",
+    Description = "Schiusa uova automaticamente",
+    Callback = function(v)
+        State.AutoHatch = v
+        if v then
+            task.spawn(function()
+                while State.AutoHatch do
+                    local remote = findRemote({"hatch", "open", "egg"})
+                    if remote then
+                        pcall(function()
+                            if remote:IsA("RemoteFunction") then remote:InvokeServer("Basic")
+                            else remote:FireServer("Basic") end
+                        end)
+                    end
+                    task.wait(State.AutoDelay + math.random())
+                end
+            end)
+        end
+    end,
+})
+
+Egg:Button({
+    Title = "🔍  Scansiona remote del gioco",
+    Callback = function()
+        local found = {}
+        for _, obj in pairs(Replicated:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                table.insert(found, obj:GetFullName())
+            end
+        end
+        State.SpyLog = found
+        notify("Scan", #found .. " remote trovati. Apri la tab Remote → Stampa log")
+    end,
+})
+
+Egg:Section("Manipolazione diretta")
+
+local moneyStat = "Money"
+local moneyAmt = "1000"
+
+Egg:Input({
+    Title = "Stat soldi",
+    Placeholder = "Money",
+    Callback = function(t) if t ~= "" then moneyStat = t end end,
+})
+
+Egg:Input({
     Title = "Importo",
     Placeholder = "1000",
-    Callback = function(txt) moneyAmount = txt end,
+    Callback = function(t) moneyAmt = t end,
 })
 
-Main:Button({
-    Title = "➕  Aggiungi soldi",
+Egg:Button({
+    Title = "➕  Aggiungi soldi (leaderstats)",
     Callback = function()
-        local n = tonumber(moneyAmount)
-        local s = getLS(moneyTarget)
+        local n = tonumber(moneyAmt)
+        local s = getLS(moneyStat)
         if s and n then
             s.Value = s.Value + n
-            notify("Money", "+" .. n .. " " .. moneyTarget)
+            notify("Money", "+" .. n)
         else
-            notify("Money", "stat non trovato: " .. moneyTarget)
+            notify("Money", "stat non trovato — usa Remote Spy per trovare il remote")
         end
     end,
 })
 
-Main:Button({
-    Title = "💾  Imposta soldi",
-    Callback = function()
-        local n = tonumber(moneyAmount)
-        local s = getLS(moneyTarget)
-        if s and n then
-            s.Value = n
-            notify("Money", moneyTarget .. " = " .. n)
-        else
-            notify("Money", "stat non trovato: " .. moneyTarget)
-        end
-    end,
-})
-
--- ============ COMBAT TAB ============
+-- ============================================================
+-- COMBAT
+-- ============================================================
 local Combat = createTab("Combat")
 Combat:Section("Character")
 
 Combat:Toggle({
     Title = "Noclip",
-    Description = "Attraversa i muri",
     Callback = function(v)
         State.Noclip = v
         if v then
@@ -780,7 +861,6 @@ Combat:Toggle({
 
 Combat:Toggle({
     Title = "Infinite Jump",
-    Description = "Salto infinito in aria",
     Callback = function(v) State.InfiniteJump = v end,
 })
 
@@ -791,15 +871,9 @@ UserInput.JumpRequest:Connect(function()
     end
 end)
 
-Combat:Button({
-    Title = "💀  Reset Character",
-    Callback = function()
-        local h = getHumanoid()
-        if h then h.Health = 0 end
-    end,
-})
-
--- ============ VISUALS TAB ============
+-- ============================================================
+-- VISUALS
+-- ============================================================
 local Visuals = createTab("Visuals")
 Visuals:Section("ESP")
 
@@ -824,14 +898,11 @@ end
 
 Visuals:Toggle({
     Title = "Player ESP",
-    Description = "Evidenzia i giocatori",
     Callback = function(v)
         State.ESPEnabled = v
         if v then
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer then
-                    applyESP(plr, Color3.fromRGB(255, 60, 60))
-                end
+                if plr ~= LocalPlayer then applyESP(plr, Color3.fromRGB(255, 60, 60)) end
             end
         else
             clearESP()
@@ -848,9 +919,11 @@ Players.PlayerAdded:Connect(function(plr)
     end)
 end)
 
--- ============ REMOTE TAB ============
+-- ============================================================
+-- REMOTE
+-- ============================================================
 local Remote = createTab("Remote")
-Remote:Section("Spy")
+Remote:Section("Spy (⚠️ può triggerare AC — usare per pochi secondi)")
 
 local hooked = false
 local function installHooks()
@@ -866,7 +939,7 @@ local function installHooks()
             for _, v in ipairs({...}) do table.insert(parts, tostring(v)) end
             local entry = m .. " " .. self:GetFullName() .. "(" .. table.concat(parts, ", ") .. ")"
             table.insert(State.SpyLog, entry)
-            if #State.SpyLog > 200 then table.remove(State.SpyLog, 1) end
+            if #State.SpyLog > 300 then table.remove(State.SpyLog, 1) end
             notify("Remote", entry, 4)
         end
         return old(self, ...)
@@ -876,7 +949,7 @@ end
 
 Remote:Toggle({
     Title = "Remote Spy",
-    Description = "Logga FireServer / InvokeServer",
+    Description = "Logga le chiamate remote",
     Callback = function(v)
         State.SpyEnabled = v
         if v then installHooks() end
@@ -893,27 +966,13 @@ Remote:Button({
 
 Remote:Button({
     Title = "🗑  Pulisci log",
-    Callback = function()
-        State.SpyLog = {}
-        notify("Remote", "Log pulito")
-    end,
+    Callback = function() State.SpyLog = {}; notify("Remote", "pulito") end,
 })
 
 Remote:Section("Fire Manuale")
-
 local remotePath, remoteArgs = "", ""
-
-Remote:Input({
-    Title = "Percorso",
-    Placeholder = "ReplicatedStorage.Remotes.X",
-    Callback = function(t) remotePath = t end,
-})
-
-Remote:Input({
-    Title = "Args (csv)",
-    Placeholder = "1000, true, hello",
-    Callback = function(t) remoteArgs = t end,
-})
+Remote:Input({Title="Percorso", Placeholder="ReplicatedStorage.X", Callback=function(t) remotePath=t end})
+Remote:Input({Title="Args (csv)", Placeholder="1000, true", Callback=function(t) remoteArgs=t end})
 
 local function parseArgs(s)
     local o = {}
@@ -932,31 +991,35 @@ end
 Remote:Button({
     Title = "🚀  Fire Remote",
     Callback = function()
-        if remotePath == "" then notify("Errore", "Percorso vuoto"); return end
+        if remotePath == "" then notify("Errore", "percorso vuoto"); return end
         local obj = game
         for part in remotePath:gmatch("[^%.]+") do
             obj = obj:FindFirstChild(part)
             if not obj then notify("Errore", "non trovato: " .. part); return end
         end
         local a = parseArgs(remoteArgs)
-        if obj:IsA("RemoteEvent") then
-            obj:FireServer(table.unpack(a))
-            notify("Fire", "OK")
-        elseif obj:IsA("RemoteFunction") then
-            local r = obj:InvokeServer(table.unpack(a))
-            notify("Invoke", "→ " .. tostring(r))
-        else
-            notify("Errore", "non è un remote")
-        end
+        if obj:IsA("RemoteEvent") then obj:FireServer(table.unpack(a)); notify("Fire", "OK")
+        elseif obj:IsA("RemoteFunction") then notify("Invoke", "→ " .. tostring(obj:InvokeServer(table.unpack(a))))
+        else notify("Errore", "non è un remote") end
     end,
 })
 
--- ============ SETTINGS TAB ============
+-- ============================================================
+-- SETTINGS
+-- ============================================================
 local Settings = createTab("Settings")
-Settings:Section("About")
+Settings:Section("Info")
 
 Settings:Paragraph({
-    Content = "RyzeHub v1.0.0\nCustom UI, no external libraries.\n\nRightControl: minimize\nDrag dalla top bar per spostare.",
+    Content = "RyzeHub v1.1.0\nAnti-detection attivo\n\n• SAFE MODE: speed max 100, jump max 150\n• Remote Spy hooka __namecall — usa solo per pochi secondi\n• Auto-farm usa delay random per evitare pattern detection\n\nRightControl = minimize",
+})
+
+Settings:Button({
+    Title = "🧹  Ri-disabilita anticheat locale",
+    Callback = function()
+        local n = killLocalAntiCheat()
+        notify("AC", n .. " script disabilitati")
+    end,
 })
 
 Settings:Button({
@@ -966,35 +1029,39 @@ Settings:Button({
         State.JumpPower = 50; State.JumpEnabled = false
         State.Noclip = false; State.InfiniteJump = false
         State.SpyEnabled = false; State.SpyLog = {}
-        State.ESPEnabled = false; clearESP()
+        State.ESPEnabled = false; State.AutoSteal = false
+        State.AutoSell = false; State.AutoHatch = false
+        clearESP()
         local h = getHumanoid()
         if h then h.WalkSpeed = 16; h.JumpPower = 50 end
-        notify("Reset", "stato ripristinato")
+        notify("Reset", "ok")
     end,
 })
 
 Settings:Button({
     Title = "🗑  Unload RyzeHub",
     Callback = function()
-        gui:Destroy()
-        _G.RyzeHubLoaded = false
+        gui:Destroy(); _G.RyzeHubLoaded = false
     end,
 })
 
--- ============ MINIMIZE ============
+-- ============================================================
+-- MINIMIZE
+-- ============================================================
 local minimized = false
 local function toggleMin()
     minimized = not minimized
     tw(win, 0.25, {Size = minimized and UDim2.new(0, W, 0, 48) or UDim2.new(0, W, 0, H)})
 end
-
 minBtn.MouseButton1Click:Connect(toggleMin)
 UserInput.InputBegan:Connect(function(i, gp)
     if gp then return end
     if i.KeyCode == Enum.KeyCode.RightControl then toggleMin() end
 end)
 
--- ============ RESPAWN HOOKS ============
+-- ============================================================
+-- RESPAWN
+-- ============================================================
 LocalPlayer.CharacterAdded:Connect(function(c)
     local h = c:WaitForChild("Humanoid", 10)
     if h then
@@ -1003,6 +1070,8 @@ LocalPlayer.CharacterAdded:Connect(function(c)
     end
 end)
 
--- ============ INIT ============
+-- ============================================================
+-- INIT
+-- ============================================================
 selectTab("Main")
-notify("RyzeHub", "v1.0.0 caricato. RightControl per minimizzare.", 6)
+notify("RyzeHub", killed .. " anticheat locali disabilitati. v1.1.0 caricato.", 6)
