@@ -1,5 +1,5 @@
 -- language: Lua, file: main.lua, target: Roblox Steal An Egg
--- RyzeHub v2.4.0 — Fixed Slider Drag, Fixed Prompt Trigger, Robust Touch & CFrame Engine
+-- RyzeHub v3.0.0 — Zero-Dependency Engine: Physical TP-Collect, Assembly Velocity & Safe Touch
 
 if _G.RyzeHubLoaded then return end
 _G.RyzeHubLoaded = true
@@ -14,7 +14,7 @@ local CoreGui         = game:GetService("CoreGui")
 local LocalPlayer     = Players.LocalPlayer
 
 -- ============================================================
--- PARENT GUI SICURO
+-- PARENT GUI ISOLATO
 -- ============================================================
 local parentGui
 if gethui then
@@ -77,7 +77,7 @@ local function tw(obj, dur, props, style)
 end
 
 -- ============================================================
--- GUI ROOT
+-- ROOT GUI & NOTIFICHE
 -- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = rndName()
@@ -197,7 +197,7 @@ local titleLbl = Instance.new("TextLabel")
 titleLbl.Size = UDim2.new(0, 140, 1, 0)
 titleLbl.Position = UDim2.new(0, 16, 0, 0)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "RyzeHub Pro"
+titleLbl.Text = "RyzeHub Engine"
 titleLbl.TextColor3 = C.text
 titleLbl.Font = C.fontBold
 titleLbl.TextSize = 15
@@ -206,9 +206,9 @@ titleLbl.Parent = topBar
 
 local verLbl = Instance.new("TextLabel")
 verLbl.Size = UDim2.new(0, 60, 1, 0)
-verLbl.Position = UDim2.new(0, 115, 0, 0)
+verLbl.Position = UDim2.new(0, 135, 0, 0)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "v2.4.0"
+verLbl.Text = "v3.0.0"
 verLbl.TextColor3 = C.sub
 verLbl.Font = C.font
 verLbl.TextSize = 11
@@ -506,6 +506,7 @@ local function createTab(name)
         local function update(inputX)
             local barPos = bg.AbsolutePosition.X
             local barSize = bg.AbsoluteSize.X
+            if barSize <= 0 then return end
             local rel = math.clamp((inputX - barPos) / barSize, 0, 1)
             local nv = math.floor(minV + (maxV - minV) * rel)
             val = nv
@@ -579,27 +580,22 @@ local function createTab(name)
 end
 
 -- ============================================================
--- RUNTIME STATE & CORE ENGINE
+-- ZERO-DEPENDENCY CORE ENGINE
 -- ============================================================
 local State = {
+    -- Movement
     CFrameSpeed = false,
     CFrameMultiplier = 3,
-    Speed = 16,
-    SpeedEnabled = false,
-    JumpPower = 50,
-    JumpEnabled = false,
     Noclip = false,
     InfJump = false,
-    AutoStealAll = false,
+    -- Farm
+    AutoStealTP = false,
     AutoDeposit = false,
-    AutoCollectPrompt = false,
-    AutoHatch = false,
-    SelectedEgg = "Common",
-    EggESP = false,
+    AutoSellZone = false,
+    AutoRewardClaim = false,
     HomeCFrame = nil,
-    InteractRadius = 50,
-    AutoMoneyRewards = false,
-    AutoFastSell = false,
+    SellZoneCFrame = nil,
+    InteractRadius = 60,
 }
 
 local function getChar()
@@ -616,190 +612,165 @@ local function getHumanoid()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
--- CFRAME VELOCITY LOOP
+-- 1. CFRAME SPEED REALE CON MOVIMENTO PULITO
 RunService.Heartbeat:Connect(function(dt)
     if not State.CFrameSpeed then return end
     local hum = getHumanoid()
     local root = getRoot()
     if hum and root and hum.MoveDirection.Magnitude > 0 then
-        local moveDir = hum.MoveDirection.Unit
-        root.CFrame = root.CFrame + (moveDir * (State.CFrameMultiplier * 16 * dt))
+        local moveVec = hum.MoveDirection.Unit * (State.CFrameMultiplier * 16 * dt)
+        root.CFrame = root.CFrame + Vector3.new(moveVec.X, 0, moveVec.Z)
     end
 end)
 
--- PROXIMITY PROMPT ENGINE
-local function activatePrompt(p)
-    if not p or not p:IsA("ProximityPrompt") then return end
-    p.RequiresLineOfSight = false
-    p.MaxActivationDistance = math.huge
-    if fireproximityprompt then
-        fireproximityprompt(p)
-    else
-        pcall(function()
-            p:InputHoldBegin()
-            task.wait(p.HoldDuration + 0.05)
-            p:InputHoldEnd()
-        end)
-    end
-end
-
--- INVENTORY CHECK
-local function hasEgg()
+-- 2. NOCLIP CONTINUO SU STEPPED
+RunService.Stepped:Connect(function()
+    if not State.Noclip then return end
     local c = getChar()
     if c then
-        for _, obj in pairs(c:GetChildren()) do
-            if obj:IsA("Tool") or obj.Name:lower():find("egg") then return true end
+        for _, p in pairs(c:GetChildren()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
+    end
+end)
+
+-- 3. INFINITE JUMP VIA VELOCITY
+UserInput.JumpRequest:Connect(function()
+    if State.InfJump then
+        local root = getRoot()
+        if root then
+            root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 50, root.AssemblyLinearVelocity.Z)
+        end
+    end
+end)
+
+-- 4. CONTROLLO POSSESSO UOVO / TOOL
+local function isHoldingEgg()
+    local c = getChar()
+    if not c then return false end
+    for _, item in pairs(c:GetChildren()) do
+        if item:IsA("Tool") or item.Name:lower():find("egg") then return true end
     end
     local bp = LocalPlayer:FindFirstChild("Backpack")
     if bp then
-        for _, obj in pairs(bp:GetChildren()) do
-            if obj.Name:lower():find("egg") then return true end
+        for _, item in pairs(bp:GetChildren()) do
+            if item.Name:lower():find("egg") then return true end
         end
     end
     return false
 end
 
--- MONEY & REWARD INVOCATION ENGINE
-local function runMoneyRemotes()
-    local keywords = {"reward", "claim", "daily", "collect", "gift", "income"}
-    for _, desc in pairs(Replicated:GetDescendants()) do
-        if desc:IsA("RemoteEvent") then
-            local n = desc.Name:lower()
-            for _, kw in ipairs(keywords) do
-                if n:find(kw) then
-                    pcall(function() desc:FireServer() end)
-                    pcall(function() desc:FireServer(1) end)
-                    pcall(function() desc:FireServer("Daily") end)
-                    break
+-- 5. RICERCA TARGET UOVA FISICHE (CACHE VELOCE NON-BLOCCANTE)
+local function getValidEggs()
+    local found = {}
+    local myPos = getRoot() and getRoot().Position
+    if not myPos then return found end
+
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") or obj:IsA("Folder") then
+            local n = obj.Name:lower()
+            if n:find("egg") or n:find("drop") or n:find("spawn") or n:find("item") or n:find("base") then
+                for _, part in ipairs(obj:GetDescendants()) do
+                    if part:IsA("BasePart") and (part.Name:lower():find("egg") or part.Parent.Name:lower():find("egg")) then
+                        if (part.Position - myPos).Magnitude <= State.InteractRadius then
+                            -- Ignora se è nel nido personale
+                            local isSelf = false
+                            if State.HomeCFrame and (part.Position - State.HomeCFrame.Position).Magnitude < 18 then
+                                isSelf = true
+                            end
+                            if not isSelf then table.insert(found, part) end
+                        end
+                    end
                 end
             end
         end
     end
+    return found
 end
-
-local function runSellRemotes()
-    local keywords = {"sell", "deposit", "bank"}
-    for _, desc in pairs(Replicated:GetDescendants()) do
-        if desc:IsA("RemoteEvent") then
-            local n = desc.Name:lower()
-            for _, kw in ipairs(keywords) do
-                if n:find(kw) then
-                    pcall(function() desc:FireServer() end)
-                    pcall(function() desc:FireServer(true) end)
-                    break
-                end
-            end
-        end
-    end
-end
-
--- BACKGROUND WORKERS
-task.spawn(function()
-    while true do
-        if State.AutoMoneyRewards then runMoneyRemotes() end
-        task.wait(3)
-    end
-end)
-
-task.spawn(function()
-    while true do
-        if State.AutoFastSell then runSellRemotes() end
-        task.wait(1.5)
-    end
-end)
 
 -- ============================================================
 -- TAB 1: STEAL ENGINE
 -- ============================================================
 local StealTab = createTab("Steal Engine")
-StealTab:Section("Base Settings")
+StealTab:Section("Punti Chiave")
 
 StealTab:Button({
-    Title = "📍 Memorizza Mia Base (Home)",
+    Title = "📍 Salva Base Personale (Home)",
     Callback = function()
         local r = getRoot()
         if r then
             State.HomeCFrame = r.CFrame
-            notify("Base", "Posizione salvata a: " .. string.format("%.0f, %.0f, %.0f", r.Position.X, r.Position.Y, r.Position.Z), 3)
+            notify("Base", "Nido personale salvato!", 3)
         end
     end
 })
 
-StealTab:Section("Raccolta Uova")
+StealTab:Button({
+    Title = "💰 Salva Zona Vendita (Sell Area)",
+    Callback = function()
+        local r = getRoot()
+        if r then
+            State.SellZoneCFrame = r.CFrame
+            notify("Sell Area", "Zona vendita registrata!", 3)
+        end
+    end
+})
+
+StealTab:Section("Raccolta & Consegna")
 
 StealTab:Toggle({
-    Title = "Auto Grab (ProximityPrompt)",
+    Title = "Auto Steal (Micro-TP Collect)",
     Callback = function(v)
-        State.AutoCollectPrompt = v
+        State.AutoStealTP = v
         if not v then return end
         task.spawn(function()
-            while State.AutoCollectPrompt do
+            while State.AutoStealTP do
                 local root = getRoot()
-                if root then
-                    for _, p in pairs(Workspace:GetDescendants()) do
-                        if not State.AutoCollectPrompt then break end
-                        if p:IsA("ProximityPrompt") and p.Enabled then
-                            local targetPart = p.Parent
-                            if targetPart and targetPart:IsA("BasePart") then
-                                if (root.Position - targetPart.Position).Magnitude <= State.InteractRadius then
-                                    activatePrompt(p)
-                                    task.wait(0.05)
-                                end
+                if root and not isHoldingEgg() then
+                    local eggs = getValidEggs()
+                    for _, eggPart in ipairs(eggs) do
+                        if not State.AutoStealTP or isHoldingEgg() then break end
+                        if eggPart and eggPart.Parent then
+                            local oldCF = root.CFrame
+                            -- Spostamento sopra l'uovo per innescare la fisica del server
+                            root.CFrame = eggPart.CFrame + Vector3.new(0, 1.5, 0)
+                            task.wait(0.12)
+                            -- Se abbiamo il prompt nativo, lo premiamo
+                            local p = eggPart:FindFirstChildOfClass("ProximityPrompt") or (eggPart.Parent and eggPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
+                            if p and fireproximityprompt then
+                                fireproximityprompt(p)
                             end
+                            task.wait(0.08)
+                            -- Ritorna alla posizione di sicurezza se non ha ancora raccolto
+                            if not isHoldingEgg() and root then
+                                root.CFrame = oldCF
+                            end
+                            task.wait(0.2)
                         end
                     end
                 end
-                task.wait(0.15)
+                task.wait(0.3)
             end
         end)
     end
 })
 
 StealTab:Toggle({
-    Title = "Auto Touch Collide (Fisico)",
-    Callback = function(v)
-        State.AutoStealAll = v
-        if not v then return end
-        task.spawn(function()
-            while State.AutoStealAll do
-                local root = getRoot()
-                if root then
-                    for _, obj in pairs(Workspace:GetDescendants()) do
-                        if not State.AutoStealAll then break end
-                        if obj:IsA("BasePart") and (obj.Name:lower():find("egg") or (obj.Parent and obj.Parent.Name:lower():find("egg"))) then
-                            local isMyBase = false
-                            if State.HomeCFrame and (obj.Position - State.HomeCFrame.Position).Magnitude < 16 then
-                                isMyBase = true
-                            end
-                            if not isMyBase and (root.Position - obj.Position).Magnitude <= State.InteractRadius then
-                                firetouchinterest(root, obj, 0)
-                                task.wait(0.03)
-                                firetouchinterest(root, obj, 1)
-                            end
-                        end
-                    end
-                end
-                task.wait(0.2)
-            end
-        end)
-    end
-})
-
-StealTab:Toggle({
-    Title = "Instant Base Deposit (Loop)",
+    Title = "Instant Base Deposit",
     Callback = function(v)
         State.AutoDeposit = v
         if not v then return end
         task.spawn(function()
             while State.AutoDeposit do
-                if State.HomeCFrame and hasEgg() then
+                if State.HomeCFrame and isHoldingEgg() then
                     local root = getRoot()
                     if root then
-                        local lastPos = root.CFrame
+                        local origin = root.CFrame
                         root.CFrame = State.HomeCFrame
                         task.wait(0.35)
-                        if root then root.CFrame = lastPos end
+                        if root and not isHoldingEgg() then
+                            root.CFrame = origin
+                        end
                     end
                 end
                 task.wait(0.4)
@@ -809,8 +780,8 @@ StealTab:Toggle({
 })
 
 StealTab:Slider({
-    Title = "Raggio Azione (Studs)",
-    Min = 20, Max = 150, CurrentValue = 50, Suffix = " studs",
+    Title = "Raggio Cerca Uova",
+    Min = 20, Max = 250, CurrentValue = 60, Suffix = " studs",
     Callback = function(v) State.InteractRadius = v end
 })
 
@@ -818,65 +789,64 @@ StealTab:Slider({
 -- TAB 2: MONEY & SELL
 -- ============================================================
 local MoneyTab = createTab("Money")
-MoneyTab:Section("Cash Automation")
+MoneyTab:Section("Vendita & Guadagno")
 
 MoneyTab:Toggle({
-    Title = "Auto Fast Sell (Loop)",
-    Callback = function(v) State.AutoFastSell = v end
-})
-
-MoneyTab:Toggle({
-    Title = "Auto Claim Rewards",
-    Callback = function(v) State.AutoMoneyRewards = v end
-})
-
-MoneyTab:Button({
-    Title = "💸 Raccogli Tutte le Ricompense",
-    Callback = function()
-        runMoneyRemotes()
-        runSellRemotes()
-        notify("Money", "Invocazione reward completata.")
+    Title = "Auto Sell (TP su Zona Vendita)",
+    Callback = function(v)
+        State.AutoSellZone = v
+        if not v then return end
+        task.spawn(function()
+            while State.AutoSellZone do
+                if State.SellZoneCFrame and isHoldingEgg() then
+                    local root = getRoot()
+                    if root then
+                        local lastPos = root.CFrame
+                        root.CFrame = State.SellZoneCFrame
+                        task.wait(0.3)
+                        if root then root.CFrame = lastPos end
+                    end
+                end
+                task.wait(1)
+            end
+        end)
     end
 })
 
--- ============================================================
--- TAB 3: HATCH
--- ============================================================
-local ShopTab = createTab("Hatch")
-ShopTab:Section("Auto Unbox")
-
-ShopTab:Dropdown({
-    Title = "Tipo Uovo",
-    Items = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"},
-    Callback = function(val) State.SelectedEgg = val end
-})
-
-ShopTab:Toggle({
-    Title = "Auto Hatch Selezionato",
+MoneyTab:Toggle({
+    Title = "Auto Claim Rewards (Loop)",
     Callback = function(v)
-        State.AutoHatch = v
+        State.AutoRewardClaim = v
         if not v then return end
         task.spawn(function()
-            while State.AutoHatch do
-                for _, r in pairs(Replicated:GetDescendants()) do
-                    if r:IsA("RemoteEvent") and (r.Name:lower():find("hatch") or r.Name:lower():find("open") or r.Name:lower():find("buy")) then
-                        pcall(function() r:FireServer(State.SelectedEgg, 1) end)
+            local kw = {"reward", "claim", "daily", "collect", "gift", "income", "money"}
+            while State.AutoRewardClaim do
+                for _, obj in ipairs(Replicated:GetDescendants()) do
+                    if obj:IsA("RemoteEvent") then
+                        local n = obj.Name:lower()
+                        for _, w in ipairs(kw) do
+                            if n:find(w) then
+                                pcall(function() obj:FireServer() end)
+                                pcall(function() obj:FireServer(1) end)
+                                break
+                            end
+                        end
                     end
                 end
-                task.wait(1.5)
+                task.wait(4)
             end
         end)
     end
 })
 
 -- ============================================================
--- TAB 4: MOVEMENT
+-- TAB 3: MOVEMENT
 -- ============================================================
 local MoveTab = createTab("Movement")
-MoveTab:Section("CFrame Speed (Anti-Kick)")
+MoveTab:Section("Velocità CFrame (Anti-Kick)")
 
 MoveTab:Toggle({
-    Title = "CFrame Walk",
+    Title = "CFrame Speed",
     Callback = function(v) State.CFrameSpeed = v end
 })
 
@@ -886,28 +856,11 @@ MoveTab:Slider({
     Callback = function(v) State.CFrameMultiplier = v end
 })
 
-MoveTab:Section("Fisica Base")
+MoveTab:Section("Fisica Personaggio")
 
 MoveTab:Toggle({
-    Title = "Noclip",
-    Callback = function(v)
-        State.Noclip = v
-        if v then
-            task.spawn(function()
-                while State.Noclip do
-                    local c = getChar()
-                    if c then
-                        for _, part in pairs(c:GetDescendants()) do
-                            if part:IsA("BasePart") and part.CanCollide then
-                                part.CanCollide = false
-                            end
-                        end
-                    end
-                    RunService.Stepped:Wait()
-                end
-            end)
-        end
-    end
+    Title = "Noclip (Muri Trasparenti)",
+    Callback = function(v) State.Noclip = v end
 })
 
 MoveTab:Toggle({
@@ -915,64 +868,56 @@ MoveTab:Toggle({
     Callback = function(v) State.InfJump = v end
 })
 
-UserInput.JumpRequest:Connect(function()
-    if State.InfJump then
-        local h = getHumanoid()
-        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end)
-
 -- ============================================================
--- TAB 5: VISUALS
+-- TAB 4: VISUALS
 -- ============================================================
 local VisTab = createTab("Visuals")
-VisTab:Section("Tracciamento")
+VisTab:Section("ESP Uova")
 
-local eggHighlights = {}
-local function clearEggESP()
-    for _, h in pairs(eggHighlights) do pcall(function() h:Destroy() end) end
-    eggHighlights = {}
+local highlights = {}
+local function cleanESP()
+    for _, h in pairs(highlights) do pcall(function() h:Destroy() end) end
+    highlights = {}
 end
 
 VisTab:Toggle({
-    Title = "Eggs ESP",
+    Title = "Highlight Uova",
     Callback = function(v)
-        State.EggESP = v
         if v then
             task.spawn(function()
-                while State.EggESP do
-                    for _, obj in pairs(Workspace:GetDescendants()) do
-                        if not State.EggESP then break end
-                        if obj:IsA("BasePart") and obj.Name:lower():find("egg") and not obj:FindFirstChild("RyzeEggESP") then
+                while v do
+                    local eggs = getValidEggs()
+                    for _, egg in ipairs(eggs) do
+                        if not egg:FindFirstChild("RyzeHL") then
                             local hl = Instance.new("Highlight")
-                            hl.Name = "RyzeEggESP"
-                            hl.FillColor = Color3.fromRGB(255, 215, 0)
+                            hl.Name = "RyzeHL"
+                            hl.FillColor = Color3.fromRGB(255, 200, 50)
                             hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-                            hl.FillTransparency = 0.4
-                            hl.Adornee = obj
-                            hl.Parent = obj
-                            table.insert(eggHighlights, hl)
+                            hl.FillTransparency = 0.3
+                            hl.Adornee = egg
+                            hl.Parent = egg
+                            table.insert(highlights, hl)
                         end
                     end
                     task.wait(2.5)
                 end
             end)
         else
-            clearEggESP()
+            cleanESP()
         end
     end
 })
 
 -- ============================================================
--- TAB 6: SETTINGS
+-- TAB 5: SETTINGS
 -- ============================================================
 local SetTab = createTab("Settings")
-SetTab:Section("Script")
+SetTab:Section("Controllo")
 
 SetTab:Button({
     Title = "Scarica Script (Unload)",
     Callback = function()
-        clearEggESP()
+        cleanESP()
         gui:Destroy()
         _G.RyzeHubLoaded = false
     end
@@ -980,10 +925,8 @@ SetTab:Button({
 
 UserInput.InputBegan:Connect(function(i, gp)
     if gp then return end
-    if i.KeyCode == Enum.KeyCode.RightControl then
-        toggleMin()
-    end
+    if i.KeyCode == Enum.KeyCode.RightControl then toggleMin() end
 end)
 
 selectTab("Steal Engine")
-notify("RyzeHub Pro", "v2.4.0 caricata. Motore interazione e slider allineati.", 4)
+notify("RyzeHub Pro", "v3.0.0 avviato. Salva Home e Sell per iniziare!", 5)
