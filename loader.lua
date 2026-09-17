@@ -1,32 +1,44 @@
 -- language: Lua, file: loader.lua, target: Roblox
--- RyzeHub Loader — fetch sicuro e anti-doppio caricamento
+-- RyzeHub Loader v3.0.0 — Cache-busting, fetch sicuro e anti-doppio avvio
 
 local CONFIG = {
-    Version = "2.1.0",
+    Version = "3.0.0",
     CoreURL = "https://raw.githubusercontent.com/ryze-glitch/RyzeHub/main/main.lua",
 }
 
+-- Controllo esecuzione precedente
 if _G.RyzeHubLoaded then
-    warn("[RyzeHub] Script già in esecuzione.")
+    warn("[RyzeHub] Script già caricato in memoria.")
     return
 end
 
-local ok, core = pcall(function()
-    return game:HttpGet(CONFIG.CoreURL, true)
+-- Verifica disponibilità delle funzioni dell'esecutore
+if not game.HttpGet or not loadstring then
+    warn("[RyzeHub] Esecutore non supportato: HttpGet o loadstring mancanti.")
+    return
+end
+
+-- Download con parametro anti-cache per evitare versioni vecchie salvate da GitHub CDN
+local fetchURL = CONFIG.CoreURL .. "?nocache=" .. tostring(os.time())
+local fetchOk, core = pcall(function()
+    return game:HttpGet(fetchURL, true)
 end)
 
-if not ok or not core or core == "" then
-    warn("[RyzeHub] Errore durante il download del core: " .. tostring(core))
+if not fetchOk or not core or core == "" then
+    warn("[RyzeHub] Download fallito: " .. tostring(core))
     return
 end
 
-local chunk, compileErr = loadstring(core, "RyzeHub@" .. CONFIG.Version)
+-- Compilazione del codice
+local chunk, compileErr = loadstring(core, "RyzeHubCore@" .. CONFIG.Version)
 if not chunk then
     warn("[RyzeHub] Errore di compilazione: " .. tostring(compileErr))
     return
 end
 
-local execOk, runtimeErr = pcall(chunk)
-if not execOk then
-    warn("[RyzeHub] Errore di esecuzione runtime: " .. tostring(runtimeErr))
+-- Esecuzione protetta del chunk principale
+local runOk, runErr = pcall(chunk)
+if not runOk then
+    _G.RyzeHubLoaded = false
+    warn("[RyzeHub] Errore runtime durante l'avvio: " .. tostring(runErr))
 end
