@@ -1,44 +1,40 @@
 -- language: Lua, file: loader.lua, target: Roblox
--- RyzeHub Loader v3.0.0 — Cache-busting, fetch sicuro e anti-doppio avvio
+-- RyzeHub Loader v3.1.0 — Cache-Buster, Error Guard & Safe Load
 
 local CONFIG = {
-    Version = "3.0.0",
+    Version = "3.1.0",
     CoreURL = "https://raw.githubusercontent.com/ryze-glitch/RyzeHub/main/main.lua",
 }
 
--- Controllo esecuzione precedente
 if _G.RyzeHubLoaded then
-    warn("[RyzeHub] Script già caricato in memoria.")
+    warn("[RyzeHub] Script già attivo in memoria.")
     return
 end
 
--- Verifica disponibilità delle funzioni dell'esecutore
 if not game.HttpGet or not loadstring then
-    warn("[RyzeHub] Esecutore non supportato: HttpGet o loadstring mancanti.")
+    warn("[RyzeHub] Funzioni HttpGet o loadstring non presenti nell'esecutore.")
     return
 end
 
--- Download con parametro anti-cache per evitare versioni vecchie salvate da GitHub CDN
-local fetchURL = CONFIG.CoreURL .. "?nocache=" .. tostring(os.time())
-local fetchOk, core = pcall(function()
-    return game:HttpGet(fetchURL, true)
+-- Bypass cache GitHub per caricare istantaneamente le modifiche puslate
+local noCacheURL = CONFIG.CoreURL .. "?t=" .. tostring(os.time())
+local okFetch, core = pcall(function()
+    return game:HttpGet(noCacheURL, true)
 end)
 
-if not fetchOk or not core or core == "" then
+if not okFetch or not core or core == "" then
     warn("[RyzeHub] Download fallito: " .. tostring(core))
     return
 end
 
--- Compilazione del codice
 local chunk, compileErr = loadstring(core, "RyzeHubCore@" .. CONFIG.Version)
 if not chunk then
-    warn("[RyzeHub] Errore di compilazione: " .. tostring(compileErr))
+    warn("[RyzeHub] Errore di sintassi nel Core: " .. tostring(compileErr))
     return
 end
 
--- Esecuzione protetta del chunk principale
-local runOk, runErr = pcall(chunk)
-if not runOk then
+local okRun, runErr = pcall(chunk)
+if not okRun then
     _G.RyzeHubLoaded = false
-    warn("[RyzeHub] Errore runtime durante l'avvio: " .. tostring(runErr))
+    warn("[RyzeHub] Crash all'avvio: " .. tostring(runErr))
 end
