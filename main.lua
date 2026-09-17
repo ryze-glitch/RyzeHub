@@ -615,7 +615,6 @@ local function getHumanoid()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
--- CONTROLLO SE POSSIEDE L'UOVO
 local function isCarryingEgg()
     local c = getChar()
     if c then
@@ -632,7 +631,6 @@ local function isCarryingEgg()
     return false
 end
 
--- RILEVA AUTOMATICAMENTE LA PROPRIA BASE E LE ALTRE BASI
 local function getBases()
     local basesFolder = Workspace:FindFirstChild("Bases") or Workspace:FindFirstChild("Plots") or Workspace:FindFirstChild("Islands")
     local enemyEggParts = {}
@@ -641,7 +639,6 @@ local function getBases()
     if basesFolder then
         for _, base in ipairs(basesFolder:GetChildren()) do
             local isMyBase = false
-            -- Riconoscimento owner o distanza dalla Home salvata
             if base.Name:lower():find(LocalPlayer.Name:lower()) or (myBasePos and (base:GetModelCFrame().Position - myBasePos).Magnitude < 30) then
                 isMyBase = true
             end
@@ -655,7 +652,6 @@ local function getBases()
             end
         end
     else
-        -- Fallback: scansione generale della mappa se la cartella non si chiama Bases
         for _, desc in ipairs(Workspace:GetChildren()) do
             if desc:IsA("Model") and desc ~= getChar() then
                 for _, p in ipairs(desc:GetDescendants()) do
@@ -671,8 +667,6 @@ local function getBases()
     return enemyEggParts
 end
 
--- MOVIMENTO CON FORZA LINEARE (SPEED HUB X METHOD - NO RUBBERBAND)
-local moverVelocity = nil
 RunService.Heartbeat:Connect(function()
     local root = getRoot()
     local hum = getHumanoid()
@@ -683,7 +677,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- NOCLIP
 RunService.Stepped:Connect(function()
     if not State.Noclip then return end
     local c = getChar()
@@ -694,7 +687,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- INFINITE JUMP
 UserInput.JumpRequest:Connect(function()
     if State.InfJump then
         local root = getRoot()
@@ -748,18 +740,15 @@ StealTab:Toggle({
                         if not State.AutoStealAllBases or isCarryingEgg() then break end
                         if targetPart and targetPart.Parent then
                             local prevPos = root.CFrame
-                            -- Spostamento a filo per attivare il touch
                             root.CFrame = targetPart.CFrame + Vector3.new(0, 1.5, 0)
                             task.wait(0.12)
                             
-                            -- Supporto ProximityPrompt nativo se presente
                             local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt") or (targetPart.Parent and targetPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
                             if prompt and fireproximityprompt then
                                 fireproximityprompt(prompt)
                             end
                             task.wait(0.08)
 
-                            -- Se non ha ancora preso l'uovo ritorna indietro
                             if not isCarryingEgg() and root then
                                 root.CFrame = prevPos
                             end
@@ -863,7 +852,6 @@ HatchTab:Toggle({
         task.spawn(function()
             while State.AutoHatch do
                 local root = getRoot()
-                -- Ricerca stand dell'uovo per nome
                 local standPart = nil
                 for _, obj in ipairs(Workspace:GetDescendants()) do
                     if obj:IsA("Model") and obj.Name:lower():find(State.EggTarget:lower()) then
@@ -877,14 +865,12 @@ HatchTab:Toggle({
                     root.CFrame = standPart.CFrame + Vector3.new(0, 3, 2)
                     task.wait(0.15)
 
-                    -- Trigger Remote se esiste
                     for _, r in ipairs(Replicated:GetDescendants()) do
                         if r:IsA("RemoteEvent") and (r.Name:lower():find("hatch") or r.Name:lower():find("buy")) then
                             pcall(function() r:FireServer(State.EggTarget, 1) end)
                         end
                     end
 
-                    -- Trigger Proximity se presente sullo stand
                     local p = standPart.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
                     if p and fireproximityprompt then
                         fireproximityprompt(p)
